@@ -14,6 +14,7 @@ function config() {
     username: env('POLL_USERNAME', 'admin'),
     password: env('POLL_PASSWORD', 'change this password now'),
     adminPath: env('POLL_ADMIN_PATH', '/en/page/m31vsrxno0p/poll-admin'),
+    playerPath: env('POLL_PLAYER_PATH', '/en/page/player/poll-player'),
   };
 }
 

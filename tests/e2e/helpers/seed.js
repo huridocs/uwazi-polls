@@ -13,7 +13,7 @@ async function resolvePollSchema(request) {
       byName[t.name.replace('[Poll] ', '')] = t._id;
     }
   }
-  const needed = ['Poll', 'Section', 'Question', 'Option'];
+  const needed = ['Poll', 'Section', 'Question', 'Option', 'Session'];
   for (const k of needed) {
     if (!byName[k]) throw new Error(`Missing template [Poll] ${k}`);
   }
@@ -35,6 +35,7 @@ async function resolvePollSchema(request) {
     pollStatus: valuesFor('Poll status'),
     qType: valuesFor('Question type'),
     yesNo: valuesFor('Yes No'),
+    sessionStatus: valuesFor('Session status'),
   };
 }
 
@@ -142,10 +143,54 @@ async function sectionOrderByNumber(request, pollSharedId) {
   return rows.map(r => r.title);
 }
 
+/**
+ * Question titles in a section, ordered by poll_number.
+ * @param {import('@playwright/test').APIRequestContext} request
+ * @param {string} sectionSharedId
+ */
+async function questionOrderByNumber(request, sectionSharedId) {
+  const schema = await resolvePollSchema(request);
+  const data = await api(
+    request,
+    'GET',
+    `/api/search?types=${encodeURIComponent(JSON.stringify([schema.templates.Question]))}&includeUnpublished=true&limit=3000`
+  );
+  const rows = (data.rows || []).filter(r => {
+    const rel = (r.metadata && r.metadata.poll_section) || [];
+    return rel[0] && rel[0].value === sectionSharedId;
+  });
+  rows.sort((a, b) => {
+    const na = (((a.metadata || {}).poll_number || [])[0] || {}).value || 0;
+    const nb = (((b.metadata || {}).poll_number || [])[0] || {}).value || 0;
+    return na - nb;
+  });
+  return rows.map(r => r.title);
+}
+
+/**
+ * Create an in-progress session for a poll (player needs ?poll=&token=).
+ * @param {import('@playwright/test').APIRequestContext} request
+ * @param {string} pollSharedId
+ * @param {string} [token]
+ */
+async function createPollSession(request, pollSharedId, token) {
+  const schema = await resolvePollSchema(request);
+  const tok = token || `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const session = await createEntity(request, `E2E session ${tok}`, schema.templates.Session, {
+    poll_poll: [{ value: pollSharedId }],
+    poll_session_status: [{ value: schema.sessionStatus.in_progress }],
+    poll_respondent: [{ value: 'e2e' }],
+    poll_token: [{ value: tok }],
+  });
+  return { session, token: tok };
+}
+
 module.exports = {
   resolvePollSchema,
   createEntity,
   seedTwoSectionPoll,
   deleteEntities,
   sectionOrderByNumber,
+  questionOrderByNumber,
+  createPollSession,
 };

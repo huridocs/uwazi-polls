@@ -7,6 +7,7 @@ const {
   resolvePollSchema,
   createEntity,
   deleteEntities,
+  createPollSession,
 } = require('./seed');
 
 /**
@@ -84,6 +85,14 @@ async function createMixedPollFixture(request) {
     questions: { guide: qGuide, choice: qChoice, text: qText },
     options: { yes: optYes, no: optNo },
     sharedIds,
+    /**
+     * Attach an in-progress session so the player can open ?poll=&token=.
+     */
+    async withSession() {
+      const { session, token } = await createPollSession(request, poll.sharedId);
+      sharedIds.push(session.sharedId);
+      return { session, token };
+    },
     async cleanup() {
       await deleteEntities(request, sharedIds);
     },
