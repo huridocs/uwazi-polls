@@ -10,3 +10,5 @@ pages.local.json
 .uwazi/
 *.log
 .DS_Store
+.yarn/install-state.gz
+.yarn/cache
