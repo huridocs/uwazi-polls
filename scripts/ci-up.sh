@@ -139,6 +139,16 @@ echo "==> blank-state ($DB_NAME)"
   env -u DBHOST yarn blank-state "$DB_NAME"
 )
 
+echo "==> Postgres schema (yarn migrate --new)"
+# Classic blank-state only runs Mongo `yarn migrate`. PG tables (captchas,
+# password_recoveries, activitylogs, …) are applied by the --new MigrationJob /
+# PgMigrator path. Without this, queue workers spam missing-relation errors and
+# HTTP readiness can fail.
+(
+  cd "$UWAZI_DIR/latest"
+  yarn migrate --new
+)
+
 echo "==> starting Uwazi"
 (
   cd "$UWAZI_DIR/latest"
@@ -149,13 +159,17 @@ echo "==> starting Uwazi"
 
 echo "==> waiting for HTTP"
 for i in $(seq 1 90); do
-  if curl -fsS "$POLL_BASE_URL/api/settings" >/dev/null 2>&1; then
+  code="$(curl -sS -o /tmp/uwazi-health.out -w '%{http_code}' "$POLL_BASE_URL/api/settings" || true)"
+  if [[ "$code" == "200" ]]; then
     echo "Uwazi is up"
     break
   fi
   sleep 2
   if [[ "$i" -eq 90 ]]; then
-    echo "Uwazi did not become ready; last log lines:"
+    echo "Uwazi did not become ready (last HTTP $code); body:"
+    head -c 500 /tmp/uwazi-health.out || true
+    echo
+    echo "last log lines:"
     tail -n 80 "$UWAZI_DIR/log/server.log" || true
     exit 1
   fi
