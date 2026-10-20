@@ -158,15 +158,17 @@ echo "==> starting Uwazi"
 )
 
 echo "==> waiting for HTTP"
+# /api/settings can return 401 on a private instance; any HTTP response means the
+# process is listening. Connection refused / empty code means still starting.
 for i in $(seq 1 90); do
   code="$(curl -sS -o /tmp/uwazi-health.out -w '%{http_code}' "$POLL_BASE_URL/api/settings" || true)"
-  if [[ "$code" == "200" ]]; then
-    echo "Uwazi is up"
+  if [[ "$code" =~ ^[12345][0-9][0-9]$ ]]; then
+    echo "Uwazi is up (HTTP $code)"
     break
   fi
   sleep 2
   if [[ "$i" -eq 90 ]]; then
-    echo "Uwazi did not become ready (last HTTP $code); body:"
+    echo "Uwazi did not become ready (last HTTP '${code:-none}'); body:"
     head -c 500 /tmp/uwazi-health.out || true
     echo
     echo "last log lines:"
