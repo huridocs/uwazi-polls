@@ -203,6 +203,65 @@ async function answersForSession(request, sessionSharedId) {
   });
 }
 
+/**
+ * @param {import('@playwright/test').APIRequestContext} request
+ * @param {string} templateId
+ * @param {string} title
+ */
+async function findEntityByTitle(request, templateId, title) {
+  const data = await api(
+    request,
+    'GET',
+    `/api/search?types=${encodeURIComponent(JSON.stringify([templateId]))}&includeUnpublished=true&limit=3000`
+  );
+  return (data.rows || []).find(r => r.title === title) || null;
+}
+
+/**
+ * @param {import('@playwright/test').APIRequestContext} request
+ * @param {string} questionText
+ */
+async function findQuestionByText(request, questionText) {
+  const schema = await resolvePollSchema(request);
+  const data = await api(
+    request,
+    'GET',
+    `/api/search?types=${encodeURIComponent(JSON.stringify([schema.templates.Question]))}&includeUnpublished=true&limit=3000`
+  );
+  return (
+    (data.rows || []).find(r => {
+      const text = (((r.metadata || {}).poll_question_text || [])[0] || {}).value;
+      return text === questionText;
+    }) || null
+  );
+}
+
+/**
+ * @param {import('@playwright/test').APIRequestContext} request
+ * @param {string} sessionSharedId
+ */
+async function loadSession(request, sessionSharedId) {
+  const schema = await resolvePollSchema(request);
+  const data = await api(
+    request,
+    'GET',
+    `/api/search?types=${encodeURIComponent(JSON.stringify([schema.templates.Session]))}&includeUnpublished=true&limit=3000`
+  );
+  return (data.rows || []).find(r => r.sharedId === sessionSharedId) || null;
+}
+
+/**
+ * @param {import('@playwright/test').APIRequestContext} request
+ * @param {string} sessionSharedId
+ */
+async function deleteAnswersForSession(request, sessionSharedId) {
+  const answers = await answersForSession(request, sessionSharedId);
+  await deleteEntities(
+    request,
+    answers.map(a => a.sharedId)
+  );
+}
+
 module.exports = {
   resolvePollSchema,
   createEntity,
@@ -212,4 +271,8 @@ module.exports = {
   questionOrderByNumber,
   createPollSession,
   answersForSession,
+  findEntityByTitle,
+  findQuestionByText,
+  loadSession,
+  deleteAnswersForSession,
 };

@@ -1,7 +1,12 @@
 const { test, expect } = require('@playwright/test');
 const { config, apiLogin, applySessionCookie } = require('./helpers/uwazi');
 const { createMixedPollFixture } = require('./helpers/fixture');
-const { answersForSession } = require('./helpers/seed');
+const {
+  answersForSession,
+  deleteAnswersForSession,
+  loadSession,
+  resolvePollSchema,
+} = require('./helpers/seed');
 
 test.describe('Poll player — answer flow', () => {
   /** @type {Awaited<ReturnType<typeof createMixedPollFixture>> | null} */
@@ -12,20 +17,18 @@ test.describe('Poll player — answer flow', () => {
   test.afterEach(async ({ request }) => {
     if (fixture) {
       await apiLogin(request);
+      if (sessionInfo) {
+        await deleteAnswersForSession(request, sessionInfo.session.sharedId);
+      }
       await fixture.cleanup();
       fixture = null;
       sessionInfo = null;
     }
   });
 
-  test('saves choice answer with S{n} Q{n} title and selected option', async ({
-    page,
-    context,
-    request,
-  }) => {
+  async function openPlayer(page, context, request) {
     await apiLogin(request);
     await applySessionCookie(context, request);
-
     fixture = await createMixedPollFixture(request);
     sessionInfo = await fixture.withSession();
 
@@ -42,6 +45,14 @@ test.describe('Poll player — answer flow', () => {
     await expect(page.locator('#pp-card .pp-qtext')).toContainText('Alpha choice question', {
       timeout: 30_000,
     });
+  }
+
+  test('saves choice answer with S{n} Q{n} title and selected option', async ({
+    page,
+    context,
+    request,
+  }) => {
+    await openPlayer(page, context, request);
 
     // Section 1, question 2 (instructions skipped) → title S1 Q2
     await page.locator('input[name="pp-option"]').first().check();
@@ -68,5 +79,37 @@ test.describe('Poll player — answer flow', () => {
           options: [fixture.options.yes.sharedId],
         },
       ]);
+  });
+
+  test('Accept & finish shows thank-you and marks session accepted', async ({
+    page,
+    context,
+    request,
+  }) => {
+    await openPlayer(page, context, request);
+
+    await page.locator('input[name="pp-option"]').first().check();
+    await page.locator('#pp-next').click();
+    await expect(page.locator('#pp-card .pp-qtext')).toContainText('Beta free text', {
+      timeout: 30_000,
+    });
+
+    // Last item — leave unanswered and finish.
+    await page.locator('#pp-accept').click();
+    await expect(page.locator('#pp-confirm-ok')).toBeVisible({ timeout: 15_000 });
+    await page.locator('#pp-confirm-ok').click();
+
+    await expect(page.locator('#pp-card .pp-done')).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator('#pp-card .pp-done')).toContainText('Thank you');
+    await expect(page.locator('#pp-card .pp-done')).toContainText(fixture.poll.title);
+
+    const schema = await resolvePollSchema(request);
+    await expect
+      .poll(async () => {
+        const session = await loadSession(request, sessionInfo.session.sharedId);
+        const status = (((session || {}).metadata || {}).poll_session_status || [])[0] || {};
+        return status.value || status.label;
+      })
+      .toBe(schema.sessionStatus.accepted);
   });
 });
