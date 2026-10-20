@@ -24,34 +24,60 @@ export POLL_PASSWORD="${POLL_PASSWORD:-change this password now}"
 
 mkdir -p "$UWAZI_DIR"/{log,uploaded_documents,custom_uploads,temporal_files}
 
-ensure_mongorestore() {
-  if command -v mongorestore >/dev/null 2>&1; then
-    return
-  fi
-  echo "==> installing MongoDB Database Tools (mongorestore)"
-  local ver="${MONGODB_TOOLS_VERSION:-100.12.0}"
-  local arch
-  arch="$(uname -m)"
-  case "$arch" in
-    x86_64) arch=x86_64 ;;
-    aarch64|arm64) arch=arm64 ;;
+ensure_mongo_cli() {
+  local arch host_arch tools_arch mongosh_arch
+  host_arch="$(uname -m)"
+  case "$host_arch" in
+    x86_64)
+      tools_arch=x86_64
+      mongosh_arch=x64
+      ;;
+    aarch64|arm64)
+      tools_arch=arm64
+      mongosh_arch=arm64
+      ;;
     *)
-      echo "unsupported arch for mongodb tools: $arch"
+      echo "unsupported arch for mongodb cli: $host_arch"
       exit 1
       ;;
   esac
-  local dist="mongodb-database-tools-ubuntu2204-${arch}-${ver}"
-  local url="https://fastdl.mongodb.org/tools/db/${dist}.tgz"
-  local dest="$UWAZI_DIR/mongodb-tools"
-  mkdir -p "$dest"
-  curl -fsSL "$url" -o "$dest/tools.tgz"
-  tar -xzf "$dest/tools.tgz" -C "$dest" --strip-components=1
-  export PATH="$dest/bin:$PATH"
+
+  local bin_dir="$UWAZI_DIR/mongodb-cli/bin"
+  mkdir -p "$bin_dir"
+  export PATH="$bin_dir:$PATH"
+
+  if ! command -v mongorestore >/dev/null 2>&1; then
+    echo "==> installing MongoDB Database Tools (mongorestore)"
+    local tools_ver="${MONGODB_TOOLS_VERSION:-100.12.0}"
+    local tools_dist="mongodb-database-tools-ubuntu2204-${tools_arch}-${tools_ver}"
+    local tools_url="https://fastdl.mongodb.org/tools/db/${tools_dist}.tgz"
+    local tools_dest="$UWAZI_DIR/mongodb-cli/tools"
+    mkdir -p "$tools_dest"
+    curl -fsSL "$tools_url" -o "$tools_dest/tools.tgz"
+    tar -xzf "$tools_dest/tools.tgz" -C "$tools_dest" --strip-components=1
+    ln -sfn "$tools_dest/bin/"* "$bin_dir/"
+  fi
+
+  if ! command -v mongosh >/dev/null 2>&1; then
+    echo "==> installing mongosh"
+    local sh_ver="${MONGOSH_VERSION:-2.5.0}"
+    local sh_dist="mongosh-${sh_ver}-linux-${mongosh_arch}"
+    local sh_url="https://downloads.mongodb.com/compass/${sh_dist}.tgz"
+    local sh_dest="$UWAZI_DIR/mongodb-cli/mongosh"
+    mkdir -p "$sh_dest"
+    curl -fsSL "$sh_url" -o "$sh_dest/mongosh.tgz"
+    tar -xzf "$sh_dest/mongosh.tgz" -C "$sh_dest" --strip-components=1
+    # tarball layout: bin/mongosh
+    ln -sfn "$sh_dest/bin/mongosh" "$bin_dir/mongosh"
+  fi
+
   command -v mongorestore >/dev/null
+  command -v mongosh >/dev/null
   echo "mongorestore at $(command -v mongorestore)"
+  echo "mongosh at $(command -v mongosh)"
 }
 
-ensure_mongorestore
+ensure_mongo_cli
 
 echo "==> docker compose up"
 docker compose -f docker/compose.yml up -d
