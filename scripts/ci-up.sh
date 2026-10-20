@@ -24,6 +24,35 @@ export POLL_PASSWORD="${POLL_PASSWORD:-change this password now}"
 
 mkdir -p "$UWAZI_DIR"/{log,uploaded_documents,custom_uploads,temporal_files}
 
+ensure_mongorestore() {
+  if command -v mongorestore >/dev/null 2>&1; then
+    return
+  fi
+  echo "==> installing MongoDB Database Tools (mongorestore)"
+  local ver="${MONGODB_TOOLS_VERSION:-100.12.0}"
+  local arch
+  arch="$(uname -m)"
+  case "$arch" in
+    x86_64) arch=x86_64 ;;
+    aarch64|arm64) arch=arm64 ;;
+    *)
+      echo "unsupported arch for mongodb tools: $arch"
+      exit 1
+      ;;
+  esac
+  local dist="mongodb-database-tools-ubuntu2204-${arch}-${ver}"
+  local url="https://fastdl.mongodb.org/tools/db/${dist}.tgz"
+  local dest="$UWAZI_DIR/mongodb-tools"
+  mkdir -p "$dest"
+  curl -fsSL "$url" -o "$dest/tools.tgz"
+  tar -xzf "$dest/tools.tgz" -C "$dest" --strip-components=1
+  export PATH="$dest/bin:$PATH"
+  command -v mongorestore >/dev/null
+  echo "mongorestore at $(command -v mongorestore)"
+}
+
+ensure_mongorestore
+
 echo "==> docker compose up"
 docker compose -f docker/compose.yml up -d
 

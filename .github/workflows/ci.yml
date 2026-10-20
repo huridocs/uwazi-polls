@@ -32,6 +32,7 @@ jobs:
 
       - name: Start dockerized Uwazi + seed
         run: yarn ci:up
+        # ci-up installs mongorestore if missing (required by yarn blank-state)
 
       - name: Run Playwright
         run: yarn test
