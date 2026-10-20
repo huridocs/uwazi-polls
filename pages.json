@@ -1,0 +1,11 @@
+{
+  "note": "Local/CI values are written by scripts/seed-pages.mjs after publishing. Do not commit secrets.",
+  "admin": {
+    "files": "admin/",
+    "title": "Poll admin"
+  },
+  "player": {
+    "files": "player/",
+    "title": "Poll player"
+  }
+}
