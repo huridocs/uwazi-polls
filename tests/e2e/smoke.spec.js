@@ -49,9 +49,12 @@ test.describe('Smoke', () => {
     await expect(page.locator('#poll-player #pp-card')).toBeVisible({
       timeout: 30_000,
     });
+    // Player resumes on the first answerable question (skips instructions).
     await expect(page.locator('#pp-card .pp-qtext')).toBeVisible({
       timeout: 30_000,
     });
-    await expect(page.locator('#pp-card .pp-qtext')).toContainText('Welcome guidance');
+    await expect(page.locator('#pp-card .pp-qtext')).toContainText(
+      'Alpha choice question'
+    );
   });
 });
