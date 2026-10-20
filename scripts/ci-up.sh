@@ -21,6 +21,15 @@ export FILES_ROOT_PATH="${FILES_ROOT_PATH:-$UWAZI_DIR}"
 export POLL_BASE_URL="${POLL_BASE_URL:-http://127.0.0.1:3000}"
 export POLL_USERNAME="${POLL_USERNAME:-admin}"
 export POLL_PASSWORD="${POLL_PASSWORD:-change this password now}"
+# Match docker/compose.yml Postgres (superuser admin/admin). Official Uwazi defaults
+# to migrator_user/app_user via provisioning SQL we do not mount in CI.
+export POSTGRES_HOST="${POSTGRES_HOST:-127.0.0.1}"
+export POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+export POSTGRES_DB="${POSTGRES_DB:-uwazi_development}"
+export POSTGRES_USER="${POSTGRES_USER:-admin}"
+export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-admin}"
+export POSTGRES_APP_USER="${POSTGRES_APP_USER:-admin}"
+export POSTGRES_APP_PASSWORD="${POSTGRES_APP_PASSWORD:-admin}"
 
 mkdir -p "$UWAZI_DIR"/{log,uploaded_documents,custom_uploads,temporal_files}
 
