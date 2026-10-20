@@ -580,6 +580,28 @@
     return metaLabel(session, 'poll_session_status') || '—';
   }
 
+  /** Format entity creationDate (ms) or date metadata (unix seconds) for the sessions table. */
+  function formatSessionDate(raw) {
+    if (raw === undefined || raw === null || raw === '') return '—';
+    var n = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isFinite(n) || n <= 0) return '—';
+    // Uwazi date properties are seconds; entity creationDate/editDate are ms.
+    if (n < 1e12) n = n * 1000;
+    var d = new Date(n);
+    if (Number.isNaN(d.getTime())) return '—';
+    try {
+      return d.toLocaleString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch (err) {
+      return d.toISOString().slice(0, 16).replace('T', ' ');
+    }
+  }
+
   function nameEq(a, b) {
     return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
   }
@@ -3965,7 +3987,9 @@
       html += '<p class="pa-muted">No sessions yet for this poll.</p>';
     } else {
       html +=
-        '<table class="pa-table"><thead><tr><th>Respondent</th><th>Status</th><th>Token</th><th></th></tr></thead><tbody>';
+        '<table class="pa-table"><thead><tr>' +
+        '<th>Respondent</th><th>Status</th><th>Created</th><th>Accepted</th><th>Token</th><th></th>' +
+        '</tr></thead><tbody>';
       state.sessions.forEach(function (s) {
         var token = metaVal(s, 'poll_token') || '';
         var st = sessionStatusLabel(s);
@@ -3978,6 +4002,14 @@
           '</td>';
         html +=
           '<td><span class="pa-pill ' + stCls + '">' + escapeHtml(st) + '</span></td>';
+        html +=
+          '<td class="pa-muted">' +
+          escapeHtml(formatSessionDate(s.creationDate)) +
+          '</td>';
+        html +=
+          '<td class="pa-muted">' +
+          escapeHtml(formatSessionDate(metaVal(s, 'poll_accepted_at'))) +
+          '</td>';
         html +=
           '<td><code class="pa-token">' +
           escapeHtml(token ? token.slice(0, 8) + '...' : '—') +
