@@ -13,7 +13,7 @@ async function resolvePollSchema(request) {
       byName[t.name.replace('[Poll] ', '')] = t._id;
     }
   }
-  const needed = ['Poll', 'Section', 'Question', 'Option', 'Session'];
+  const needed = ['Poll', 'Section', 'Question', 'Option', 'Session', 'Answer'];
   for (const k of needed) {
     if (!byName[k]) throw new Error(`Missing template [Poll] ${k}`);
   }
@@ -185,6 +185,24 @@ async function createPollSession(request, pollSharedId, token) {
   return { session, token: tok };
 }
 
+/**
+ * Answers for a session, newest-first by title for stable assertions.
+ * @param {import('@playwright/test').APIRequestContext} request
+ * @param {string} sessionSharedId
+ */
+async function answersForSession(request, sessionSharedId) {
+  const schema = await resolvePollSchema(request);
+  const data = await api(
+    request,
+    'GET',
+    `/api/search?types=${encodeURIComponent(JSON.stringify([schema.templates.Answer]))}&includeUnpublished=true&limit=3000`
+  );
+  return (data.rows || []).filter(r => {
+    const rel = (r.metadata && r.metadata.poll_session) || [];
+    return rel[0] && rel[0].value === sessionSharedId;
+  });
+}
+
 module.exports = {
   resolvePollSchema,
   createEntity,
@@ -193,4 +211,5 @@ module.exports = {
   sectionOrderByNumber,
   questionOrderByNumber,
   createPollSession,
+  answersForSession,
 };
