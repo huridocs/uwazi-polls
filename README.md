@@ -69,7 +69,74 @@ Requires Docker, Node 20+, curl, and enough RAM for Elasticsearch (~1GB+).
 4. Start the server, wait until HTTP responds
 5. `yarn seed` against that instance (writes `.env.ci`)
 
+## SurveyMonkey import / export
+
+Poll admin can **Import** from SurveyMonkey (API or pasted JSON) and **Export** a poll as SurveyMonkey-compatible JSON.
+
+The JSON shape is SurveyMonkey’s  
+[`GET /v3/surveys/{id}/details`](https://developer.surveymonkey.com/api/v3/#surveys-id-details)  
+response (we only need structure fields):
+
+```json
+{
+  "title": "My survey",
+  "id": "optional-survey-id",
+  "pages": [
+    {
+      "id": "page1",
+      "title": "Section title",
+      "questions": [
+        {
+          "id": "q1",
+          "family": "single_choice",
+          "subtype": "vertical",
+          "headings": [{ "heading": "Pick one" }],
+          "answers": {
+            "choices": [
+              { "id": "c1", "text": "Yes" },
+              { "id": "c2", "text": "No" }
+            ]
+          }
+        },
+        {
+          "id": "q2",
+          "family": "open_ended",
+          "subtype": "essay",
+          "headings": [{ "heading": "Comments" }]
+        },
+        {
+          "id": "q3",
+          "family": "presentation",
+          "subtype": "descriptive_text",
+          "headings": [{ "heading": "Instructions text" }]
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Type mapping
+
+| SurveyMonkey `family` / `subtype` | Poll type |
+| --- | --- |
+| `presentation` (any) | Instructions |
+| `single_choice` | Choice (single) |
+| `multiple_choice` | Choice (multi) |
+| `open_ended` + `numerical` / `numeric` | Numeric |
+| `open_ended` (other) | Free text |
+| anything else | Skipped on import (warned) |
+
+Export writes the same `pages` / `questions` shape so you can re-import via **Import → JSON**. Uwazi-only fields (sessions, answers, `choice_and_text` extra prompt) are not represented in SM JSON; `choice_and_text` exports as a choice question.
+
+Shared mapping code: [`lib/sm-details.js`](lib/sm-details.js) (concatenated into the admin page script by `yarn seed:pages`).
+
 ## Tests
+
+```bash
+yarn test:unit   # SM import/export mapping (no Uwazi)
+yarn test        # Playwright e2e (needs running Uwazi / yarn ci:up)
+```
 
 Playwright specs under `tests/e2e/`:
 
@@ -77,8 +144,10 @@ Playwright specs under `tests/e2e/`:
 - **structure-dnd** — section / question drag-and-drop persistence
 - **admin-crud** — create poll → section → question via UI
 - **player-flow** — save answer (`S{n} Q{n}` title) + Accept & finish
+- **session-link** — Copy link uses this instance’s Poll player path
+- **import-export** — export download is SM details JSON
 
-CI: `.github/workflows/ci.yml` on push/PR (`yarn ci:up` → `yarn test` → `yarn ci:down`).
+CI: `.github/workflows/ci.yml` on push/PR (`yarn test:unit` → `yarn ci:up` → `yarn test` → `yarn ci:down`).
 
 ## Publishing to an existing instance
 

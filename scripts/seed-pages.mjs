@@ -11,10 +11,17 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
 
 function readPageFiles(folder) {
+  const dir = folder.replace(/\/$/, '');
+  let script = fs.readFileSync(path.join(root, dir, 'script.js'), 'utf8');
+  // Admin import/export helpers live in lib/sm-details.js (also unit-tested).
+  if (dir === 'admin') {
+    const sm = fs.readFileSync(path.join(root, 'lib/sm-details.js'), 'utf8');
+    script = sm + '\n' + script;
+  }
   return {
-    content: fs.readFileSync(path.join(root, folder, 'content.html'), 'utf8'),
-    script: fs.readFileSync(path.join(root, folder, 'script.js'), 'utf8'),
-    css: fs.readFileSync(path.join(root, folder, 'style.css'), 'utf8'),
+    content: fs.readFileSync(path.join(root, dir, 'content.html'), 'utf8'),
+    script,
+    css: fs.readFileSync(path.join(root, dir, 'style.css'), 'utf8'),
   };
 }
 

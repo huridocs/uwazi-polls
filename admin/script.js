@@ -1,5 +1,11 @@
-/* Poll admin — pages-based; requires logged-in admin/editor */
+/* Poll admin — pages-based; requires logged-in admin/editor.
+ * Expects PollSmDetails (lib/sm-details.js) to be loaded first when published via seed:pages.
+ */
 (function () {
+  var SM = typeof PollSmDetails !== 'undefined' ? PollSmDetails : null;
+  var DOCS_URL =
+    'https://github.com/huridocs/uwazi-polls#surveymonkey-import--export';
+
   var CONFIG = {
     // Filled at runtime by matching [Poll] names/labels on the instance.
     templates: {
@@ -1156,10 +1162,19 @@
           '">Structure</button> ' +
           '<button type="button" class="pa-btn pa-sessions" data-id="' +
           escapeHtml(p.sharedId) +
-          '">Sessions</button></td></tr>';
+          '">Sessions</button> ' +
+          '<button type="button" class="pa-btn pa-export" data-id="' +
+          escapeHtml(p.sharedId) +
+          '">Export</button></td></tr>';
       });
       html += '</tbody></table>';
     }
+    html +=
+      '<p class="pa-muted pa-docs-link" style="margin-top:1rem">' +
+      '<a href="' +
+      DOCS_URL +
+      '" target="_blank" rel="noopener noreferrer">SurveyMonkey import/export format (docs)</a>' +
+      '</p>';
     html = appendActiveModal(html);
     renderShell(html, head);
     bindList();
@@ -1238,6 +1253,12 @@
     for (var s = 0; s < sess.length; s++) {
       sess[s].addEventListener('click', function (ev) {
         openPoll(ev.currentTarget.getAttribute('data-id'), 'sessions');
+      });
+    }
+    var exp = cardEl.querySelectorAll('.pa-export');
+    for (var e = 0; e < exp.length; e++) {
+      exp[e].addEventListener('click', function (ev) {
+        exportPollAsSmJson(ev.currentTarget.getAttribute('data-id'));
       });
     }
   }
@@ -3112,125 +3133,17 @@
     return data;
   }
 
-  function stripHtml(html) {
-    var s = String(html || '');
-    s = s.replace(/<br\s*\/?>/gi, '\n');
-    s = s.replace(/<\/p>/gi, '\n');
-    s = s.replace(/<[^>]+>/g, '');
-    s = s
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'");
-    return s.replace(/\n{3,}/g, '\n\n').trim();
-  }
-
-  function mapSmQuestion(q, warnings) {
-    var fam = q.family || '';
-    var sub = q.subtype || '';
-    var heading = '';
-    if (q.headings && q.headings[0]) {
-      heading = stripHtml(q.headings[0].heading || '');
+  function requireSmDetails() {
+    if (!SM) {
+      throw new Error(
+        'SurveyMonkey helpers missing (PollSmDetails). Re-publish admin via yarn seed:pages.'
+      );
     }
-    var required = !!(q.required && q.required.type);
-    var item = {
-      smId: q.id,
-      heading: heading || '(untitled)',
-      required: required,
-      family: fam,
-      subtype: sub,
-      skip: false,
-      kind: null, // instructions | choice | free_text | numeric
-      allowMultiple: false,
-      choices: [],
-    };
-    if (fam === 'presentation') {
-      item.kind = 'instructions';
-      return item;
-    }
-    if (fam === 'single_choice') {
-      item.kind = 'choice';
-      item.allowMultiple = false;
-      item.choices = ((q.answers && q.answers.choices) || []).map(function (c) {
-        return { smId: c.id, text: stripHtml(c.text || '') };
-      });
-      return item;
-    }
-    if (fam === 'multiple_choice') {
-      item.kind = 'choice';
-      item.allowMultiple = true;
-      item.choices = ((q.answers && q.answers.choices) || []).map(function (c) {
-        return { smId: c.id, text: stripHtml(c.text || '') };
-      });
-      return item;
-    }
-    if (fam === 'open_ended') {
-      if (sub === 'numerical' || sub === 'numeric') {
-        item.kind = 'numeric';
-      } else {
-        item.kind = 'free_text';
-      }
-      return item;
-    }
-    item.skip = true;
-    item.kind = null;
-    warnings.push(
-      'Skipped SM question ' +
-        (q.id || '') +
-        ' (' +
-        fam +
-        '/' +
-        sub +
-        '): ' +
-        (heading || '').slice(0, 60)
-    );
-    return item;
+    return SM;
   }
 
   function buildImportPreviewFromSmDetails(details) {
-    var warnings = [];
-    var sections = (details.pages || []).map(function (page, idx) {
-      var items = (page.questions || []).map(function (q) {
-        return mapSmQuestion(q, warnings);
-      });
-      return {
-        smId: page.id,
-        title: stripHtml(page.title || 'Section ' + (idx + 1)),
-        items: items,
-      };
-    });
-    var stats = {
-      sections: sections.length,
-      items: 0,
-      choice: 0,
-      multi: 0,
-      text: 0,
-      numeric: 0,
-      guidance: 0,
-      skipped: 0,
-    };
-    sections.forEach(function (sec) {
-      sec.items.forEach(function (it) {
-        stats.items += 1;
-        if (it.skip) stats.skipped += 1;
-        else if (it.kind === 'instructions') stats.guidance += 1;
-        else if (it.kind === 'choice' && it.allowMultiple) stats.multi += 1;
-        else if (it.kind === 'choice') stats.choice += 1;
-        else if (it.kind === 'numeric') stats.numeric += 1;
-        else if (it.kind === 'free_text') stats.text += 1;
-      });
-    });
-    return {
-      title: details.title || details.nickname || 'Imported poll',
-      nickname: details.nickname || '',
-      smSurveyId: details.id,
-      sections: sections,
-      stats: stats,
-      warnings: warnings,
-      source: 'sm',
-    };
+    return requireSmDetails().buildImportPreviewFromSmDetails(details);
   }
 
   function buildImportPreviewFromJson(raw) {
@@ -3243,6 +3156,97 @@
     return preview;
   }
 
+  function questionKindForExport(q) {
+    var typ = qTypeLabel(q);
+    if (typ === 'instructions' || typ === 'Section / instructions') return 'instructions';
+    if (typ === 'choice' || metaVal(q, 'poll_type') === CONFIG.qType.choice) return 'choice';
+    if (typ === 'choice_and_text' || metaVal(q, 'poll_type') === CONFIG.qType.choice_and_text) {
+      return 'choice_and_text';
+    }
+    if (typ === 'numeric' || metaVal(q, 'poll_type') === CONFIG.qType.numeric) return 'numeric';
+    if (typ === 'free_text' || metaVal(q, 'poll_type') === CONFIG.qType.free_text) {
+      return 'free_text';
+    }
+    var id = metaVal(q, 'poll_type');
+    for (var k in CONFIG.qType) if (CONFIG.qType[k] === id) return k;
+    return 'free_text';
+  }
+
+  function downloadJson(filename, obj) {
+    var blob = new Blob([JSON.stringify(obj, null, 2)], {
+      type: 'application/json',
+    });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () {
+      URL.revokeObjectURL(url);
+    }, 1000);
+  }
+
+  async function exportPollAsSmJson(pollSharedId) {
+    if (!pollSharedId) return;
+    setBusy(true);
+    state.error = null;
+    try {
+      requireSmDetails();
+      await loadConfigDeps();
+      var poll = await loadEntity(pollSharedId);
+      if (!poll) throw new Error('Poll not found.');
+      await loadStructure(pollSharedId);
+      var sections = (state.sections || []).slice().sort(function (a, b) {
+        return (metaVal(a, 'poll_number') || 0) - (metaVal(b, 'poll_number') || 0);
+      });
+      var payload = {
+        title: poll.title,
+        sharedId: poll.sharedId,
+        sections: sections.map(function (sec) {
+          var qs = questionsForSection(sec.sharedId).slice().sort(function (a, b) {
+            return (metaVal(a, 'poll_number') || 0) - (metaVal(b, 'poll_number') || 0);
+          });
+          return {
+            sharedId: sec.sharedId,
+            title: sec.title,
+            questions: qs.map(function (q) {
+              var kind = questionKindForExport(q);
+              var choices = [];
+              if (kind === 'choice' || kind === 'choice_and_text') {
+                choices = metaList(q, 'poll_available_options').map(function (o) {
+                  return {
+                    sharedId: o.value,
+                    text: o.label || o.value || '',
+                  };
+                });
+              }
+              return {
+                sharedId: q.sharedId,
+                text: metaVal(q, 'poll_question_text') || q.title || '',
+                kind: kind,
+                allowMultiple: metaVal(q, 'poll_allow_multiple') === CONFIG.yesNo.yes,
+                choices: choices,
+              };
+            }),
+          };
+        }),
+      };
+      var details = SM.exportPollToSmDetails(payload);
+      var safeName = String(poll.title || 'poll')
+        .replace(/[^a-z0-9]+/gi, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 60);
+      downloadJson((safeName || 'poll') + '-sm-details.json', details);
+    } catch (err) {
+      state.error = err.message || String(err);
+      renderList();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function renderImportModalHtml() {
     var preview = state.importPreview;
     var canCreate =
@@ -3253,6 +3257,12 @@
     html += '<div class="pa-modal-backdrop" id="pa-modal-backdrop">';
     html += '<div class="pa-modal pa-modal-wide" role="dialog" aria-modal="true">';
     html += '<h2>Import poll</h2>';
+    html +=
+      '<p class="pa-muted pa-docs-link" style="margin:0 0 0.75rem">' +
+      '<a href="' +
+      DOCS_URL +
+      '" target="_blank" rel="noopener noreferrer">SurveyMonkey JSON format (docs)</a>' +
+      '</p>';
     html += modalErrorHtml();
     if (state.importProgress) {
       html +=
