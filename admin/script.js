@@ -41,7 +41,8 @@
       hasOption: '',
       selected: '',
     },
-    playerPage: '/en/page/8zuxyd6dmwo/poll-player',
+    // Set at boot from the "Poll player" Page on this instance (never hardcode sharedIds).
+    playerPage: '',
   };
 
   /** Match by name/label only; ids are refreshed from whatever exists on the instance. */
@@ -563,7 +564,32 @@
     return s;
   }
 
+  function currentLangPrefix() {
+    var m = (window.location.pathname || '').match(/^\/([a-z]{2})(?:\/|$)/i);
+    return m ? '/' + m[1].toLowerCase() : '/en';
+  }
+
+  /** Resolve player Page path for this host (OMCT vs local have different sharedIds). */
+  async function resolvePlayerPage() {
+    var pages = await api('GET', '/api/pages');
+    var rows = Array.isArray(pages) ? pages : pages.rows || [];
+    var player = rows.find(function (p) {
+      var t = p.title || (p.locales && p.locales.en && p.locales.en.title) || '';
+      return String(t).trim() === 'Poll player';
+    });
+    if (!player || !player.sharedId) {
+      throw new Error(
+        'Could not find a Page titled "Poll player". Publish the player page on this instance first.'
+      );
+    }
+    CONFIG.playerPage =
+      currentLangPrefix() + '/page/' + player.sharedId + '/poll-player';
+  }
+
   function sessionPlayerUrl(pollSharedId, token) {
+    if (!CONFIG.playerPage) {
+      throw new Error('Player page path not resolved yet.');
+    }
     return (
       CONFIG.playerPage +
       '?poll=' +
@@ -4261,6 +4287,14 @@
       return;
     }
     renderShell('<p class="pa-muted">Loading polls...</p>');
+    try {
+      await resolvePlayerPage();
+    } catch (e) {
+      renderShell(
+        '<p class="pa-error">' + escapeHtml(e.message || String(e)) + '</p>'
+      );
+      return;
+    }
     await bootList();
   }
 
