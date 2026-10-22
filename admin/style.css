@@ -49,6 +49,31 @@
   font-size: 0.78rem;
 }
 
+.pa-page-foot {
+  margin: 0.45rem 0 0;
+  padding: 0 calc(1.25rem + 1px) 0 0;
+  text-align: right;
+}
+
+.pa-docs-link {
+  margin: 0.35rem 0 0;
+  text-align: right;
+  line-height: 1.25;
+}
+
+/* Size on the <a> — Uwazi global link styles override inheritance from the <p>. */
+#poll-admin .pa-docs-link a {
+  color: var(--pa-ink-muted) !important;
+  font-size: 0.65rem !important;
+  line-height: 1.25 !important;
+  font-weight: 400 !important;
+  text-decoration: underline !important;
+}
+
+#poll-admin .pa-docs-link a:hover {
+  color: var(--pa-ink-secondary) !important;
+}
+
 .pa-card {
   background: var(--pa-paper);
   border: 1px solid color-mix(in srgb, var(--pa-border) 70%, transparent);

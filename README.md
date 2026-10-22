@@ -125,6 +125,7 @@ response (we only need structure fields):
 | `multiple_choice` | Choice (multi) |
 | `open_ended` + `numerical` / `numeric` | Numeric |
 | `open_ended` (other) | Free text |
+| `datetime` (e.g. `date_only`) | Date (single calendar day) |
 | anything else | Skipped on import (warned) |
 
 Export writes the same `pages` / `questions` shape so you can re-import via **Import → JSON**. Uwazi-only fields (sessions, answers, `choice_and_text` extra prompt) are not represented in SM JSON; `choice_and_text` exports as a choice question.

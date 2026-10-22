@@ -94,6 +94,12 @@ test.describe('Poll player — answer flow', () => {
       timeout: 30_000,
     });
 
+    // Skip free text → date is last
+    await page.locator('#pp-skip').click();
+    await expect(page.locator('#pp-card .pp-qtext')).toContainText('Beta date question', {
+      timeout: 30_000,
+    });
+
     // Last item — leave unanswered and finish.
     await page.locator('#pp-accept').click();
     await expect(page.locator('#pp-confirm-ok')).toBeVisible({ timeout: 15_000 });
@@ -111,5 +117,41 @@ test.describe('Poll player — answer flow', () => {
         return status.value || status.label;
       })
       .toBe(schema.sessionStatus.accepted);
+  });
+
+  test('saves date answer with poll_date metadata', async ({ page, context, request }) => {
+    await openPlayer(page, context, request);
+
+    await page.locator('input[name="pp-option"]').first().check();
+    await page.locator('#pp-next').click();
+    await expect(page.locator('#pp-card .pp-qtext')).toContainText('Beta free text', {
+      timeout: 30_000,
+    });
+    await page.locator('#pp-skip').click();
+    await expect(page.locator('#pp-date')).toBeVisible({ timeout: 30_000 });
+
+    await page.locator('#pp-date').fill('2026-06-15');
+    await page.locator('#pp-accept').click();
+    await expect(page.locator('#pp-confirm-ok')).toBeVisible({ timeout: 15_000 });
+    await page.locator('#pp-confirm-ok').click();
+    await expect(page.locator('#pp-card .pp-done')).toBeVisible({ timeout: 30_000 });
+
+    await expect
+      .poll(async () => {
+        const answers = await answersForSession(request, sessionInfo.session.sharedId);
+        const dateAns = answers.find(
+          a => (((a.metadata || {}).poll_question || [])[0] || {}).value === fixture.questions.date.sharedId
+        );
+        if (!dateAns) return null;
+        return {
+          title: dateAns.title,
+          date: (((dateAns.metadata || {}).poll_date || [])[0] || {}).value,
+        };
+      })
+      .toEqual({
+        title: 'S2 Q2',
+        // 2026-06-15 UTC midnight
+        date: Math.floor(Date.UTC(2026, 5, 15) / 1000),
+      });
   });
 });

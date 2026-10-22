@@ -67,6 +67,14 @@ async function createMixedPollFixture(request) {
     poll_section: [{ value: secB.sharedId }],
     poll_poll: [{ value: poll.sharedId }],
   });
+  const qDate = await createEntity(request, 'B2 Date', T.Question, {
+    poll_number: [{ value: 2 }],
+    poll_question_text: [{ value: 'Beta date question' }],
+    poll_type: [{ value: schema.qType.date }],
+    poll_allow_multiple: [{ value: schema.yesNo.no }],
+    poll_section: [{ value: secB.sharedId }],
+    poll_poll: [{ value: poll.sharedId }],
+  });
 
   const sharedIds = [
     poll.sharedId,
@@ -77,12 +85,13 @@ async function createMixedPollFixture(request) {
     qGuide.sharedId,
     qChoice.sharedId,
     qText.sharedId,
+    qDate.sharedId,
   ];
 
   return {
     poll,
     sections: [secA, secB],
-    questions: { guide: qGuide, choice: qChoice, text: qText },
+    questions: { guide: qGuide, choice: qChoice, text: qText, date: qDate },
     options: { yes: optYes, no: optNo },
     sharedIds,
     /**

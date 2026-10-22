@@ -32,9 +32,10 @@ test.describe('Import / export', () => {
       timeout: 30_000,
     });
 
-    // Footer link under the table
-    const footerDocs = page.locator('.pa-docs-link a');
+    // Outside the card, right-aligned footer
+    const footerDocs = page.locator('#pa-page-foot .pa-docs-link a');
     await expect(footerDocs).toBeVisible();
+    await expect(footerDocs).toHaveText('Documentation');
     await expect(footerDocs).toHaveAttribute('target', '_blank');
     await expect(footerDocs).toHaveAttribute(
       'href',
@@ -61,6 +62,8 @@ test.describe('Import / export', () => {
     expect(preview.stats.skipped).toBe(0);
     expect(preview.stats.sections).toBe(details.pages.length);
     expect(preview.stats.items).toBeGreaterThan(0);
+    // Fixture includes a date question → export must round-trip as datetime/date.
+    expect(preview.stats.date).toBeGreaterThanOrEqual(1);
 
   });
 
@@ -72,9 +75,11 @@ test.describe('Import / export', () => {
     await page.goto(adminPath);
     await expect(page.locator('#pa-import')).toBeVisible({ timeout: 30_000 });
     await page.locator('#pa-import').click();
-
-    const link = page.locator('#pa-modal-backdrop .pa-docs-link a');
+    // JSON source shows the docs link under the textarea
+    await page.locator('input[name="pa-import-source"][value="json"]').check();
+    const link = page.locator('#pa-import-json + .pa-docs-link a, .pa-field:has(#pa-import-json) .pa-docs-link a');
     await expect(link).toBeVisible();
+    await expect(link).toHaveText('Documentation');
     await expect(link).toHaveAttribute('target', '_blank');
     await expect(link).toHaveAttribute(
       'href',

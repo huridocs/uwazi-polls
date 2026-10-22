@@ -26,6 +26,7 @@ const EXPECTED_THESAURI = [
       { label: 'choice' },
       { label: 'free_text' },
       { label: 'numeric' },
+      { label: 'date' },
       { label: 'choice_and_text' },
       { label: 'instructions' },
     ],
@@ -146,6 +147,7 @@ const EXPECTED_TEMPLATES = [
       },
       { label: 'Poll text', type: 'text' },
       { label: 'Poll numeric', type: 'numeric' },
+      { label: 'Poll date', type: 'date' },
     ],
   },
 ];

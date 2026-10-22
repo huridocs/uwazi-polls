@@ -28,6 +28,7 @@
       choice: '',
       free_text: '',
       numeric: '',
+      date: '',
       choice_and_text: '',
       instructions: '',
     },
@@ -117,6 +118,7 @@
       if (lab === 'free_text' || lab === 'free text') return 'free_text';
       if (lab === 'choice_and_text' || lab === 'choice + other field') return 'choice_and_text';
       if (lab === 'numeric') return 'numeric';
+      if (lab === 'date') return 'date';
     }
     for (var k in CONFIG.qType) {
       if (CONFIG.qType[k] === entry.value) return k;
@@ -227,6 +229,7 @@
       'choice',
       'free_text',
       'numeric',
+      'date',
       'choice_and_text',
       'instructions',
     ]);
@@ -683,9 +686,36 @@
     return html;
   }
 
+  /** Uwazi date metadata ↔ <input type="date"> (YYYY-MM-DD), stored as UTC midnight unix seconds. */
+  function dateToInputValue(raw) {
+    if (raw === undefined || raw === null || raw === '') return '';
+    var n = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isFinite(n)) return '';
+    if (n < 1e12) n = n * 1000;
+    var d = new Date(n);
+    if (Number.isNaN(d.getTime())) return '';
+    var y = d.getUTCFullYear();
+    var m = String(d.getUTCMonth() + 1);
+    if (m.length < 2) m = '0' + m;
+    var day = String(d.getUTCDate());
+    if (day.length < 2) day = '0' + day;
+    return y + '-' + m + '-' + day;
+  }
+
+  function inputValueToUnixSeconds(yyyyMmDd) {
+    if (!yyyyMmDd) return null;
+    var parts = String(yyyyMmDd).split('-');
+    if (parts.length !== 3) return null;
+    var y = Number(parts[0]);
+    var mo = Number(parts[1]);
+    var d = Number(parts[2]);
+    if (!y || !mo || !d) return null;
+    return Math.floor(Date.UTC(y, mo - 1, d) / 1000);
+  }
+
   function readForm(q) {
     var type = questionType(q);
-    var result = { options: [], text: '', numeric: null };
+    var result = { options: [], text: '', numeric: null, date: null };
     if (type === 'choice' || type === 'choice_and_text') {
       var inputs = root.querySelectorAll('input[name="pp-option"]:checked');
       for (var i = 0; i < inputs.length; i++) result.options.push(inputs[i].value);
@@ -697,6 +727,10 @@
     if (type === 'numeric') {
       var num = root.querySelector('#pp-numeric');
       result.numeric = num && num.value !== '' ? Number(num.value) : null;
+    }
+    if (type === 'date') {
+      var dateEl = root.querySelector('#pp-date');
+      result.date = dateEl ? inputValueToUnixSeconds(dateEl.value) : null;
     }
     return result;
   }
@@ -710,6 +744,9 @@
     if (type === 'free_text' && !form.text) return 'Please enter an answer.';
     if (type === 'numeric' && (form.numeric === null || Number.isNaN(form.numeric))) {
       return 'Please enter a number.';
+    }
+    if (type === 'date' && (form.date === null || form.date === undefined)) {
+      return 'Please select a date.';
     }
     return null;
   }
@@ -763,6 +800,14 @@
           '<div class="pp-field"><label for="pp-numeric">Your answer</label>' +
           '<input id="pp-numeric" type="number" value="' +
           escapeHtml(nval) +
+          '" /></div>';
+      }
+      if (type === 'date') {
+        var dval = dateToInputValue(metaVal(existing, 'poll_date'));
+        html +=
+          '<div class="pp-field"><label for="pp-date">Your answer</label>' +
+          '<input id="pp-date" type="date" value="' +
+          escapeHtml(dval) +
           '" /></div>';
       }
       if (type === 'free_text' || type === 'choice_and_text') {
@@ -820,6 +865,7 @@
       if (form.numeric !== null && form.numeric !== undefined && !Number.isNaN(form.numeric)) {
         return true;
       }
+      if (form.date !== null && form.date !== undefined) return true;
       return false;
     }
 
@@ -939,6 +985,9 @@
     }
     if (type === 'numeric' && form.numeric !== null) {
       metadata.poll_numeric = [{ value: form.numeric }];
+    }
+    if (type === 'date' && form.date !== null && form.date !== undefined) {
+      metadata.poll_date = [{ value: form.date }];
     }
     return metadata;
   }

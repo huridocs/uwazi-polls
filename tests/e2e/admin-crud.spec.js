@@ -89,5 +89,20 @@ test.describe('Poll admin — CRUD smoke', () => {
       section.sharedId
     );
     expect((((question.metadata || {}).poll_poll || [])[0] || {}).value).toBe(poll.sharedId);
+
+    const dateText = `CRUD date question ${stamp}`;
+    await page.locator('.pa-add-q').click();
+    await expect(page.locator('#pa-qtext')).toBeVisible();
+    await page.locator('#pa-qtype').selectOption({ label: 'Date' });
+    await page.locator('#pa-qtext').fill(dateText);
+    await page.locator('#pa-save-q').click();
+
+    await expect(page.locator('.pa-qitem')).toHaveCount(2, { timeout: 30_000 });
+    await expect.poll(async () => findQuestionByText(request, dateText)).not.toBeNull();
+    const dateQ = await findQuestionByText(request, dateText);
+    createdIds.push(dateQ.sharedId);
+    expect((((dateQ.metadata || {}).poll_type || [])[0] || {}).value).toBe(
+      schema.qType.date
+    );
   });
 });

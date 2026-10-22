@@ -20,6 +20,7 @@
       choice: '',
       free_text: '',
       numeric: '',
+      date: '',
       choice_and_text: '',
       instructions: '',
     },
@@ -79,6 +80,7 @@
         { key: 'choice', label: 'choice' },
         { key: 'free_text', label: 'free_text' },
         { key: 'numeric', label: 'numeric' },
+        { key: 'date', label: 'date' },
         { key: 'choice_and_text', label: 'choice_and_text' },
         { key: 'instructions', label: 'instructions' },
       ],
@@ -230,6 +232,7 @@
         },
         { name: 'poll_text', label: 'Poll text', type: 'text' },
         { name: 'poll_numeric', label: 'Poll numeric', type: 'numeric' },
+        { name: 'poll_date', label: 'Poll date', type: 'date' },
       ],
     },
   ];
@@ -238,6 +241,7 @@
   if (!root) return;
   var cardEl = document.getElementById('pa-card') || root;
   var pageHeadEl = document.getElementById('pa-page-head');
+  var pageFootEl = document.getElementById('pa-page-foot');
 
   var state = {
     view: 'list', // list | structure | sessions
@@ -420,7 +424,18 @@
     return data;
   }
 
-  function renderShell(html, pageHeadHtml) {
+  function docsLinkHtml(label) {
+    return (
+      '<p class="pa-docs-link">' +
+      '<a href="' +
+      DOCS_URL +
+      '" target="_blank" rel="noopener noreferrer">' +
+      escapeHtml(label || 'Documentation') +
+      '</a></p>'
+    );
+  }
+
+  function renderShell(html, pageHeadHtml, pageFootHtml) {
     if (pageHeadEl) {
       if (pageHeadHtml) {
         pageHeadEl.innerHTML = pageHeadHtml;
@@ -428,6 +443,15 @@
       } else {
         pageHeadEl.innerHTML = '';
         pageHeadEl.hidden = true;
+      }
+    }
+    if (pageFootEl) {
+      if (pageFootHtml) {
+        pageFootEl.innerHTML = pageFootHtml;
+        pageFootEl.hidden = false;
+      } else {
+        pageFootEl.innerHTML = '';
+        pageFootEl.hidden = true;
       }
     }
     cardEl.innerHTML = html;
@@ -1169,14 +1193,9 @@
       });
       html += '</tbody></table>';
     }
-    html +=
-      '<p class="pa-muted pa-docs-link" style="margin-top:1rem">' +
-      '<a href="' +
-      DOCS_URL +
-      '" target="_blank" rel="noopener noreferrer">SurveyMonkey import/export format (docs)</a>' +
-      '</p>';
     html = appendActiveModal(html);
-    renderShell(html, head);
+    // Docs sit outside the card, right-aligned (see #pa-page-foot).
+    renderShell(html, head, docsLinkHtml('Documentation'));
     bindList();
     bindActiveModal();
   }
@@ -2359,6 +2378,7 @@
         ['choice_and_text', 'Choice + other field'],
         ['free_text', 'Open text'],
         ['numeric', 'Numeric'],
+        ['date', 'Date'],
         ['instructions', 'Instructions'],
       ].forEach(function (pair) {
         html +=
@@ -3164,6 +3184,7 @@
       return 'choice_and_text';
     }
     if (typ === 'numeric' || metaVal(q, 'poll_type') === CONFIG.qType.numeric) return 'numeric';
+    if (typ === 'date' || metaVal(q, 'poll_type') === CONFIG.qType.date) return 'date';
     if (typ === 'free_text' || metaVal(q, 'poll_type') === CONFIG.qType.free_text) {
       return 'free_text';
     }
@@ -3257,12 +3278,6 @@
     html += '<div class="pa-modal-backdrop" id="pa-modal-backdrop">';
     html += '<div class="pa-modal pa-modal-wide" role="dialog" aria-modal="true">';
     html += '<h2>Import poll</h2>';
-    html +=
-      '<p class="pa-muted pa-docs-link" style="margin:0 0 0.75rem">' +
-      '<a href="' +
-      DOCS_URL +
-      '" target="_blank" rel="noopener noreferrer">SurveyMonkey JSON format (docs)</a>' +
-      '</p>';
     html += modalErrorHtml();
     if (state.importProgress) {
       html +=
@@ -3324,7 +3339,9 @@
         '<div class="pa-field"><label for="pa-import-json">SurveyMonkey details JSON</label>' +
         '<textarea id="pa-import-json" class="pa-import-json" rows="10" placeholder="Paste /surveys/{id}/details JSON">' +
         escapeHtml(state.importJson) +
-        '</textarea></div>';
+        '</textarea>' +
+        docsLinkHtml('Documentation') +
+        '</div>';
       html +=
         '<div class="pa-field"><label for="pa-import-file">Or choose file</label>' +
         '<input id="pa-import-file" type="file" accept="application/json,.json" /></div>';
@@ -3361,6 +3378,8 @@
         st.text +
         ' · numeric ' +
         st.numeric +
+        ' · date ' +
+        (st.date || 0) +
         ' · instructions ' +
         st.guidance +
         ' · skipped ' +
@@ -3871,6 +3890,7 @@
         var allowMulti = CONFIG.yesNo.no;
         if (it.kind === 'instructions') typeId = CONFIG.qType.instructions;
         else if (it.kind === 'numeric') typeId = CONFIG.qType.numeric;
+        else if (it.kind === 'date') typeId = CONFIG.qType.date;
         else if (it.kind === 'choice') {
           typeId = CONFIG.qType.choice;
           allowMulti = it.allowMultiple ? CONFIG.yesNo.yes : CONFIG.yesNo.no;

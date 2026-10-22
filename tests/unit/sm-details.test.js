@@ -62,6 +62,18 @@ describe('PollSmDetails', () => {
     );
   });
 
+  it('maps datetime → date', () => {
+    assert.equal(
+      SM.mapSmQuestion({
+        id: '6',
+        family: 'datetime',
+        subtype: 'date_only',
+        headings: [{ heading: 'When' }],
+      }).kind,
+      'date'
+    );
+  });
+
   it('skips unknown families with a warning', () => {
     const warnings = [];
     const item = SM.mapSmQuestion(
@@ -137,6 +149,11 @@ describe('PollSmDetails', () => {
               text: 'Comment',
               kind: 'free_text',
             },
+            {
+              sharedId: 'q5',
+              text: 'When',
+              kind: 'date',
+            },
           ],
         },
       ],
@@ -144,12 +161,15 @@ describe('PollSmDetails', () => {
 
     assert.equal(details.title, 'Round trip');
     assert.equal(details.pages.length, 1);
-    assert.equal(details.pages[0].questions.length, 4);
+    assert.equal(details.pages[0].questions.length, 5);
+    assert.equal(details.pages[0].questions[4].family, 'datetime');
+    assert.equal(details.pages[0].questions[4].subtype, 'date_only');
 
     const preview = SM.buildImportPreviewFromSmDetails(details);
     const kinds = preview.sections[0].items.map(i => i.kind);
-    assert.deepEqual(kinds, ['instructions', 'choice', 'numeric', 'free_text']);
+    assert.deepEqual(kinds, ['instructions', 'choice', 'numeric', 'free_text', 'date']);
     assert.equal(preview.sections[0].items[1].choices.length, 2);
     assert.equal(preview.stats.skipped, 0);
+    assert.equal(preview.stats.date, 1);
   });
 });
