@@ -339,7 +339,7 @@
   function sectionGuidanceLinkHtml() {
     return (
       '<button type="button" class="pp-link pp-guidance-corner" id="pp-section-guidance">' +
-      'Section guidance</button>'
+      'Section instructions</button>'
     );
   }
 
@@ -359,7 +359,7 @@
       'Section ' +
       (metaVal(section, 'poll_number') || '') +
       ' — ' +
-      (section.title || 'Guidance');
+      (section.title || 'Instructions');
     var html = '';
     html += '<div class="pp-guidance-backdrop" id="pp-guidance-backdrop" role="presentation">';
     html +=
@@ -371,7 +371,7 @@
     html += '</div>';
     html += '<div class="pp-guidance-modal-body">';
     if (!guidance.length) {
-      html += '<p class="pp-muted">No guidance for this section.</p>';
+      html += '<p class="pp-muted">No instructions for this section.</p>';
     } else {
       guidance.forEach(function (q) {
         var qText = metaVal(q, 'poll_question_text') || q.title || '';
@@ -536,7 +536,7 @@
       '<p class="pp-toc-legend">' +
       filterPill('answered', 'pp-toc-answered', 'Answered') +
       filterPill('pending', 'pp-toc-pending', 'Not answered') +
-      filterPill('instructions', 'pp-toc-instructions', 'Guidance') +
+      filterPill('instructions', 'pp-toc-instructions', 'Instructions') +
       '<span class="pp-toc-pill pp-toc-current-mark" title="Highlight only — not a filter">Current</span>' +
       '</p>';
     if (tocFiltersActive()) {
@@ -744,7 +744,7 @@
     html += progressHtml();
 
     if (type === 'instructions') {
-      html += '<p class="pp-muted pp-guidance-note">This is guidance for the section — no answer required.</p>';
+      html += '<p class="pp-muted pp-guidance-note">These are instructions for the section — no answer required.</p>';
       html += '<div class="pp-instructions"><div class="pp-qtext">' + escapeHtml(qText) + '</div></div>';
     } else {
       html +=

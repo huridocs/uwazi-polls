@@ -1386,7 +1386,7 @@
         html +=
           '<button type="button" class="pa-btn pa-add-guide" data-section="' +
           escapeHtml(sec.sharedId) +
-          '">Add guidance</button>';
+          '">Add instructions</button>';
         html +=
           '<button type="button" class="pa-btn pa-btn-danger pa-del-sec" data-id="' +
           escapeHtml(sec.sharedId) +
@@ -1511,7 +1511,7 @@
         var label = q ? shortText(q) : id;
         if (
           !window.confirm(
-            'Delete this question/guidance?\n\n"' +
+            'Delete this question or instructions?\n\n"' +
               label +
               '"\n\nRemaining items in the section will be renumbered.'
           )
@@ -1539,7 +1539,7 @@
               title +
               '" and its ' +
               qs.length +
-              ' question(s)/guidance item(s)?\n\nRemaining sections will be renumbered.'
+              ' question(s)/instructions?\n\nRemaining sections will be renumbered.'
           )
         ) {
           return;
@@ -2302,7 +2302,7 @@
     html += '<div class="pa-modal" role="dialog" aria-modal="true">';
     html +=
       '<h2>' +
-      (isNew ? (asGuidance ? 'New guidance' : 'New question') : 'Edit question') +
+      (isNew ? (asGuidance ? 'New instructions' : 'New question') : 'Edit question') +
       '</h2>';
     html += modalErrorHtml();
     html += '<div class="pa-form">';
@@ -2338,7 +2338,7 @@
         ['choice_and_text', 'Choice + other field'],
         ['free_text', 'Open text'],
         ['numeric', 'Numeric'],
-        ['instructions', 'Guidance / instructions'],
+        ['instructions', 'Instructions'],
       ].forEach(function (pair) {
         html +=
           '<option value="' +
@@ -3351,7 +3351,7 @@
         st.text +
         ' · numeric ' +
         st.numeric +
-        ' · guidance ' +
+        ' · instructions ' +
         st.guidance +
         ' · skipped ' +
         st.skipped +
