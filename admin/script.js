@@ -2339,7 +2339,7 @@
       : qTypeLabel(q) === 'instructions' || metaVal(q, 'poll_type') === CONFIG.qType.instructions;
     var html = '';
     html += '<div class="pa-modal-backdrop" id="pa-modal-backdrop">';
-    html += '<div class="pa-modal" role="dialog" aria-modal="true">';
+    html += '<div class="pa-modal pa-modal-wide" role="dialog" aria-modal="true">';
     html +=
       '<h2>' +
       (isNew ? (asGuidance ? 'New instructions' : 'New question') : 'Edit question') +
@@ -2430,12 +2430,14 @@
     html +=
       '<label class="pa-opts-heading">Options <span class="pa-muted">(' +
       state.optionDraft.length +
-      ' linked)</span></label>';
-    html +=
-      '<p class="pa-muted pa-opts-hint">Drag to reorder. Reuse existing options or create new ones. Saved with the question.</p>';
+      ')</span></label>';
 
     if (!state.optionDraft.length) {
-      html += '<p class="pa-muted pa-opts-empty">No options linked yet.</p>';
+      html +=
+        '<div class="pa-opts-empty" role="status">' +
+        '<p class="pa-opts-empty-title">No options yet</p>' +
+        '<p class="pa-opts-empty-body">Search below to reuse an existing option, or type a new label and press Enter.</p>' +
+        '</div>';
     } else {
       html += '<ul class="pa-optlist" id="pa-optlist">';
       state.optionDraft.forEach(function (o, idx) {
@@ -2455,17 +2457,16 @@
           '</li>';
       });
       html += '</ul>';
+      html +=
+        '<p class="pa-muted pa-opts-hint">Drag ⋮⋮ to reorder. Changes save with the question.</p>';
     }
 
     html +=
-      '<div class="pa-opt-add">' +
-      '<input id="pa-opt-search" type="text" placeholder="Search existing options..." autocomplete="off" />' +
-      '<div class="pa-opt-results" id="pa-opt-results" hidden></div>' +
-      '</div>';
-    html +=
-      '<div class="pa-opt-create">' +
-      '<input id="pa-opt-new" type="text" placeholder="New option label" />' +
-      '<button type="button" class="pa-btn" id="pa-opt-create">Create &amp; link</button>' +
+      '<div class="pa-opt-combo">' +
+      '<label class="pa-sr-only" for="pa-opt-search">Add option</label>' +
+      '<input id="pa-opt-search" type="text" placeholder="Search or create an option…" autocomplete="off" ' +
+      'role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="pa-opt-results" />' +
+      '<div class="pa-opt-results" id="pa-opt-results" role="listbox" hidden></div>' +
       '</div>';
     html += '</div>';
     return html;
@@ -2476,6 +2477,75 @@
     if (!wrap) return;
     wrap.innerHTML = renderOptionsEditorHtml();
     bindOptionsEditor();
+  }
+
+  function optionDraftLinkedIds() {
+    var linked = {};
+    state.optionDraft.forEach(function (o) {
+      linked[o.value] = true;
+    });
+    return linked;
+  }
+
+  function findCachedOptionByLabel(label) {
+    var needle = (label || '').trim().toLowerCase();
+    if (!needle || !state.optionsCache) return null;
+    for (var i = 0; i < state.optionsCache.length; i++) {
+      if (optionLabelOf(state.optionsCache[i]).toLowerCase() === needle) {
+        return state.optionsCache[i];
+      }
+    }
+    return null;
+  }
+
+  function linkOptionToDraft(id, label) {
+    if (!id) return;
+    for (var i = 0; i < state.optionDraft.length; i++) {
+      if (state.optionDraft[i].value === id) return;
+    }
+    state.optionDraft.push({ value: id, label: label || id });
+  }
+
+  async function createOrLinkOption(label) {
+    label = (label || '').trim();
+    if (!label) return;
+    try {
+      await ensureOptionsCache();
+    } catch (e) {
+      state.modalError = e.message || String(e);
+      renderStructure();
+      return;
+    }
+    var existing = findCachedOptionByLabel(label);
+    if (existing) {
+      linkOptionToDraft(existing.sharedId, optionLabelOf(existing) || label);
+      refreshOptionsEditor();
+      return;
+    }
+    setBusy(true);
+    try {
+      var saved = await api('POST', '/api/entities', {
+        title: label,
+        template: CONFIG.templates.Option,
+        published: false,
+        language: 'en',
+        metadata: { poll_label: [{ value: label }] },
+      });
+      var ent = saved.entity || saved;
+      if (state.optionsCache) {
+        state.optionsCache.push(ent);
+        state.optionsCache.sort(function (a, b) {
+          return optionLabelOf(a).localeCompare(optionLabelOf(b));
+        });
+      }
+      linkOptionToDraft(ent.sharedId, optionLabelOf(ent) || label);
+      refreshOptionsEditor();
+    } catch (e) {
+      state.modalError = e.message || String(e);
+      renderStructure();
+    } finally {
+      setBusy(false);
+    }
   }
 
   function bindOptionsEditor() {
@@ -2495,107 +2565,183 @@
 
     var search = document.getElementById('pa-opt-search');
     var results = document.getElementById('pa-opt-results');
-    if (search && results) {
-      var runSearch = async function () {
-        var q = (search.value || '').trim().toLowerCase();
-        if (!q) {
-          results.hidden = true;
-          results.innerHTML = '';
-          return;
-        }
-        try {
-          await ensureOptionsCache();
-        } catch (e) {
-          results.hidden = false;
-          results.innerHTML =
-            '<p class="pa-error" style="margin:0.35rem">Could not load options.</p>';
-          return;
-        }
-        var linked = {};
-        state.optionDraft.forEach(function (o) {
-          linked[o.value] = true;
-        });
-        var matches = state.optionsCache
-          .filter(function (row) {
-            if (linked[row.sharedId]) return false;
-            return optionLabelOf(row).toLowerCase().indexOf(q) !== -1;
-          })
-          .slice(0, 12);
-        if (!matches.length) {
-          results.hidden = false;
-          results.innerHTML = '<p class="pa-muted" style="margin:0.35rem">No matches.</p>';
-          return;
-        }
-        var html = '<ul class="pa-opt-pick">';
-        matches.forEach(function (row) {
-          html +=
-            '<li><button type="button" class="pa-link pa-opt-pick-btn" data-id="' +
-            escapeHtml(row.sharedId) +
-            '" data-label="' +
-            escapeHtml(optionLabelOf(row)) +
-            '">' +
-            escapeHtml(optionLabelOf(row)) +
-            '</button></li>';
-        });
-        html += '</ul>';
-        results.hidden = false;
-        results.innerHTML = html;
-        var picks = results.querySelectorAll('.pa-opt-pick-btn');
-        for (var i = 0; i < picks.length; i++) {
-          picks[i].addEventListener('click', function (ev) {
-            var id = ev.currentTarget.getAttribute('data-id');
-            var label = ev.currentTarget.getAttribute('data-label');
-            state.optionDraft.push({ value: id, label: label });
-            search.value = '';
-            results.hidden = true;
-            results.innerHTML = '';
-            refreshOptionsEditor();
-          });
-        }
-      };
-      var debounce;
-      search.addEventListener('input', function () {
-        clearTimeout(debounce);
-        debounce = setTimeout(runSearch, 180);
-      });
+    if (!search || !results) return;
+
+    var activeIndex = -1;
+
+    function setExpanded(open) {
+      search.setAttribute('aria-expanded', open ? 'true' : 'false');
     }
 
-    var createBtn = document.getElementById('pa-opt-create');
-    var newInput = document.getElementById('pa-opt-new');
-    if (createBtn && newInput) {
-      createBtn.addEventListener('click', async function () {
-        var label = (newInput.value || '').trim();
-        if (!label) return;
-        setBusy(true);
-        try {
-          var saved = await api('POST', '/api/entities', {
-            title: label,
-            template: CONFIG.templates.Option,
-            published: false,
-            language: 'en',
-            metadata: { poll_label: [{ value: label }] },
-          });
-          var ent = saved.entity || saved;
-          if (state.optionsCache) {
-            state.optionsCache.push(ent);
-            state.optionsCache.sort(function (a, b) {
-              return optionLabelOf(a).localeCompare(optionLabelOf(b));
-            });
-          }
-          state.optionDraft.push({
-            value: ent.sharedId,
-            label: optionLabelOf(ent) || label,
-          });
-          newInput.value = '';
-          refreshOptionsEditor();
-        } catch (e) {
-          state.modalError = e.message || String(e);
-          renderStructure();
-        } finally {
-          setBusy(false);
-        }
-      });
+    function closeResults() {
+      results.hidden = true;
+      results.innerHTML = '';
+      activeIndex = -1;
+      setExpanded(false);
     }
+
+    function highlightActive() {
+      var buttons = results.querySelectorAll('.pa-opt-pick-btn');
+      for (var i = 0; i < buttons.length; i++) {
+        var on = i === activeIndex;
+        buttons[i].classList.toggle('pa-opt-pick-active', on);
+        if (on) buttons[i].setAttribute('aria-selected', 'true');
+        else buttons[i].removeAttribute('aria-selected');
+      }
+      if (activeIndex >= 0 && buttons[activeIndex]) {
+        buttons[activeIndex].scrollIntoView({ block: 'nearest' });
+      }
+    }
+
+    function bindResultButtons() {
+      var picks = results.querySelectorAll('.pa-opt-pick-btn');
+      for (var i = 0; i < picks.length; i++) {
+        picks[i].addEventListener('mousedown', function (ev) {
+          // Keep focus on the input so blur does not race the click.
+          ev.preventDefault();
+        });
+        picks[i].addEventListener('click', function (ev) {
+          var btn = ev.currentTarget;
+          var createLabel = btn.getAttribute('data-create');
+          if (createLabel != null) {
+            search.value = '';
+            closeResults();
+            createOrLinkOption(createLabel);
+            return;
+          }
+          var id = btn.getAttribute('data-id');
+          var label = btn.getAttribute('data-label');
+          linkOptionToDraft(id, label);
+          search.value = '';
+          closeResults();
+          refreshOptionsEditor();
+        });
+      }
+    }
+
+    var runSearch = async function (opts) {
+      opts = opts || {};
+      var raw = search.value || '';
+      var q = raw.trim().toLowerCase();
+      if (!q && !opts.forceOpen) {
+        closeResults();
+        return;
+      }
+      try {
+        await ensureOptionsCache();
+      } catch (e) {
+        results.hidden = false;
+        setExpanded(true);
+        results.innerHTML =
+          '<p class="pa-error" style="margin:0.35rem">Could not load options.</p>';
+        return;
+      }
+      var linked = optionDraftLinkedIds();
+      var matches = state.optionsCache.filter(function (row) {
+        if (linked[row.sharedId]) return false;
+        if (!q) return true;
+        return optionLabelOf(row).toLowerCase().indexOf(q) !== -1;
+      });
+      if (!q) matches = matches.slice(0, 12);
+      else matches = matches.slice(0, 12);
+
+      var exact = q ? findCachedOptionByLabel(raw) : null;
+      var exactLinked = exact && linked[exact.sharedId];
+      var canCreate = !!q && !exact;
+
+      if (!matches.length && !canCreate && !exactLinked) {
+        results.hidden = false;
+        setExpanded(true);
+        results.innerHTML =
+          '<p class="pa-muted" style="margin:0.45rem 0.65rem">No matches.</p>';
+        activeIndex = -1;
+        return;
+      }
+
+      var html = '<ul class="pa-opt-pick">';
+      matches.forEach(function (row) {
+        html +=
+          '<li role="presentation"><button type="button" class="pa-link pa-opt-pick-btn" role="option" data-id="' +
+          escapeHtml(row.sharedId) +
+          '" data-label="' +
+          escapeHtml(optionLabelOf(row)) +
+          '">' +
+          escapeHtml(optionLabelOf(row)) +
+          '</button></li>';
+      });
+      if (exactLinked) {
+        html +=
+          '<li role="presentation"><p class="pa-muted pa-opt-already">“' +
+          escapeHtml(optionLabelOf(exact) || raw.trim()) +
+          '” is already linked</p></li>';
+      } else if (canCreate) {
+        html +=
+          '<li role="presentation"><button type="button" class="pa-link pa-opt-pick-btn pa-opt-create-btn" role="option" data-create="' +
+          escapeHtml(raw.trim()) +
+          '">Create “' +
+          escapeHtml(raw.trim()) +
+          '”</button></li>';
+      }
+      html += '</ul>';
+      results.hidden = false;
+      setExpanded(true);
+      results.innerHTML = html;
+      activeIndex = matches.length || canCreate ? 0 : -1;
+      bindResultButtons();
+      highlightActive();
+    };
+
+    var debounce;
+    search.addEventListener('input', function () {
+      clearTimeout(debounce);
+      debounce = setTimeout(function () {
+        runSearch({ forceOpen: true });
+      }, 160);
+    });
+    search.addEventListener('focus', function () {
+      runSearch({ forceOpen: true });
+    });
+    search.addEventListener('blur', function () {
+      setTimeout(function () {
+        if (document.activeElement === search) return;
+        if (results.contains(document.activeElement)) return;
+        closeResults();
+      }, 120);
+    });
+    search.addEventListener('keydown', function (ev) {
+      var buttons = results.querySelectorAll('.pa-opt-pick-btn');
+      if (ev.key === 'ArrowDown') {
+        if (results.hidden) {
+          runSearch({ forceOpen: true });
+          return;
+        }
+        if (!buttons.length) return;
+        ev.preventDefault();
+        activeIndex = (activeIndex + 1) % buttons.length;
+        highlightActive();
+      } else if (ev.key === 'ArrowUp') {
+        if (!buttons.length) return;
+        ev.preventDefault();
+        activeIndex = (activeIndex - 1 + buttons.length) % buttons.length;
+        highlightActive();
+      } else if (ev.key === 'Enter') {
+        ev.preventDefault();
+        if (!results.hidden && activeIndex >= 0 && buttons[activeIndex]) {
+          buttons[activeIndex].click();
+          return;
+        }
+        var label = (search.value || '').trim();
+        if (!label) return;
+        search.value = '';
+        closeResults();
+        createOrLinkOption(label);
+      } else if (ev.key === 'Escape') {
+        if (!results.hidden) {
+          ev.preventDefault();
+          closeResults();
+        }
+      }
+    });
   }
 
   function bindOptionDraftDrag(ul) {
