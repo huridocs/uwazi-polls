@@ -118,6 +118,8 @@ const EXPECTED_TEMPLATES = [
       { label: 'Poll respondent', type: 'text' },
       { label: 'Poll accepted at', type: 'date' },
       { label: 'Poll token', type: 'text' },
+      { label: 'Poll answered count', type: 'numeric' },
+      { label: 'Poll question count', type: 'numeric' },
     ],
   },
   {

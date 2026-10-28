@@ -200,6 +200,8 @@
         { name: 'poll_respondent', label: 'Poll respondent', type: 'text' },
         { name: 'poll_accepted_at', label: 'Poll accepted at', type: 'date' },
         { name: 'poll_token', label: 'Poll token', type: 'text' },
+        { name: 'poll_answered_count', label: 'Poll answered count', type: 'numeric' },
+        { name: 'poll_question_count', label: 'Poll question count', type: 'numeric' },
       ],
     },
     {
@@ -616,16 +618,41 @@
       currentLangPrefix() + '/page/' + player.sharedId + '/poll-player';
   }
 
-  function sessionPlayerUrl(pollSharedId, token) {
+  function sessionPlayerUrl(pollSharedId, token, opts) {
     if (!CONFIG.playerPage) {
       throw new Error('Player page path not resolved yet.');
     }
-    return (
+    var url =
       CONFIG.playerPage +
       '?poll=' +
       encodeURIComponent(pollSharedId) +
       '&token=' +
-      encodeURIComponent(token)
+      encodeURIComponent(token);
+    if (opts && opts.preview) url += '&preview=1';
+    return url;
+  }
+
+  function sessionProgressCellHtml(session) {
+    var answered = metaVal(session, 'poll_answered_count');
+    var total = metaVal(session, 'poll_question_count');
+    if (total === undefined || total === null || total === '') {
+      return '<span class="pa-muted">—</span>';
+    }
+    var a = Number(answered);
+    var t = Number(total);
+    if (!Number.isFinite(t) || t < 0) t = 0;
+    if (!Number.isFinite(a) || a < 0) a = 0;
+    var pct = t ? Math.min(100, Math.round((a / t) * 100)) : 0;
+    return (
+      '<div class="pa-sess-progress" title="' +
+      escapeHtml(a + ' of ' + t + ' answered') +
+      '">' +
+      '<div class="pa-sess-bar"><span style="width:' +
+      pct +
+      '%"></span></div>' +
+      '<span class="pa-sess-progress-label">' +
+      escapeHtml(String(a) + ' / ' + String(t)) +
+      '</span></div>'
     );
   }
 
@@ -646,15 +673,13 @@
     var d = new Date(n);
     if (Number.isNaN(d.getTime())) return '—';
     try {
-      return d.toLocaleString(undefined, {
+      return d.toLocaleDateString(undefined, {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
       });
     } catch (err) {
-      return d.toISOString().slice(0, 16).replace('T', ' ');
+      return d.toISOString().slice(0, 10);
     }
   }
 
@@ -4189,21 +4214,20 @@
       html += '<p class="pa-muted">No sessions yet for this poll.</p>';
     } else {
       html +=
-        '<table class="pa-table"><thead><tr>' +
-        '<th>Respondent</th><th>Status</th><th>Created</th><th>Accepted</th><th>Token</th><th></th>' +
+        '<table class="pa-table pa-sessions-table"><thead><tr>' +
+        '<th>Respondent</th><th>Status</th><th>Progress</th><th>Created</th><th>Accepted</th><th></th>' +
         '</tr></thead><tbody>';
       state.sessions.forEach(function (s) {
         var token = metaVal(s, 'poll_token') || '';
+        var respondent = metaVal(s, 'poll_respondent') || s.title || '—';
         var st = sessionStatusLabel(s);
         var stCls =
           st === 'accepted' ? 'published' : st === 'in_progress' ? 'draft' : 'closed';
         html += '<tr>';
-        html +=
-          '<td>' +
-          escapeHtml(metaVal(s, 'poll_respondent') || s.title || '—') +
-          '</td>';
+        html += '<td>' + escapeHtml(respondent) + '</td>';
         html +=
           '<td><span class="pa-pill ' + stCls + '">' + escapeHtml(st) + '</span></td>';
+        html += '<td>' + sessionProgressCellHtml(s) + '</td>';
         html +=
           '<td class="pa-muted">' +
           escapeHtml(formatSessionDate(s.creationDate)) +
@@ -4212,16 +4236,22 @@
           '<td class="pa-muted">' +
           escapeHtml(formatSessionDate(metaVal(s, 'poll_accepted_at'))) +
           '</td>';
-        html +=
-          '<td><code class="pa-token">' +
-          escapeHtml(token ? token.slice(0, 8) + '...' : '—') +
-          '</code></td>';
         html += '<td class="pa-row-actions">';
         if (token) {
+          var openHref =
+            window.location.origin +
+            sessionPlayerUrl(state.poll.sharedId, token, { preview: true });
           html +=
-            '<button type="button" class="pa-btn pa-copy-link" data-token="' +
+            '<button type="button" class="pa-btn pa-open-session" data-href="' +
+            escapeHtml(openHref) +
+            '">Open</button>';
+          html +=
+            '<button type="button" class="pa-btn pa-icon-btn pa-copy-link" data-token="' +
             escapeHtml(token) +
-            '">Copy link</button>';
+            '" title="Copy share link" aria-label="Copy share link">' +
+            '<svg class="pa-icon" viewBox="0 0 24 24" aria-hidden="true">' +
+            '<path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>' +
+            '</svg></button>';
         } else {
           html += '<span class="pa-muted">No token — fix Session template</span>';
         }
@@ -4231,6 +4261,12 @@
             escapeHtml(s.sharedId) +
             '">Reopen</button>';
         }
+        html +=
+          '<button type="button" class="pa-btn pa-btn-danger pa-del-session" data-id="' +
+          escapeHtml(s.sharedId) +
+          '" data-label="' +
+          escapeHtml(respondent) +
+          '">Delete</button>';
         html += '</td></tr>';
       });
       html += '</tbody></table>';
@@ -4253,6 +4289,13 @@
       state.modalError = null;
       renderSessions();
     });
+    var opens = cardEl.querySelectorAll('.pa-open-session');
+    for (var o = 0; o < opens.length; o++) {
+      opens[o].addEventListener('click', function (ev) {
+        var href = ev.currentTarget.getAttribute('data-href');
+        if (href) window.open(href, '_blank', 'noopener,noreferrer');
+      });
+    }
     var copies = cardEl.querySelectorAll('.pa-copy-link');
     for (var i = 0; i < copies.length; i++) {
       copies[i].addEventListener('click', function (ev) {
@@ -4262,18 +4305,20 @@
           window.location.origin + sessionPlayerUrl(state.poll.sharedId, token);
         function markCopied() {
           if (!btn) return;
-          var prev = btn.textContent;
-          btn.textContent = 'Copied';
+          btn.classList.add('pa-copied');
+          btn.setAttribute('title', 'Copied');
           setTimeout(function () {
-            if (btn) btn.textContent = prev || 'Copy link';
+            if (!btn) return;
+            btn.classList.remove('pa-copied');
+            btn.setAttribute('title', 'Copy share link');
           }, 1500);
         }
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(url).then(markCopied, function () {
-            window.prompt('Copy link', url);
+            window.prompt('Copy share link', url);
           });
         } else {
-          window.prompt('Copy link', url);
+          window.prompt('Copy share link', url);
         }
       });
     }
@@ -4292,7 +4337,62 @@
         await reopenSession(id);
       });
     }
+    var deletes = cardEl.querySelectorAll('.pa-del-session');
+    for (var d = 0; d < deletes.length; d++) {
+      deletes[d].addEventListener('click', async function (ev) {
+        var id = ev.currentTarget.getAttribute('data-id');
+        var label = ev.currentTarget.getAttribute('data-label') || 'this session';
+        if (!id) return;
+        if (
+          !window.confirm(
+            'Delete session for "' +
+              label +
+              '"? This permanently removes the session and all its answers.'
+          )
+        ) {
+          return;
+        }
+        await deleteSession(id);
+      });
+    }
     bindActiveModal();
+  }
+
+  async function answersForSession(sessionSharedId) {
+    if (!CONFIG.templates.Answer) return [];
+    var rows = await searchByTemplate(CONFIG.templates.Answer);
+    return rows.filter(function (a) {
+      return metaVal(a, 'poll_session') === sessionSharedId;
+    });
+  }
+
+  async function deleteSession(sharedId) {
+    var s = (state.sessions || []).find(function (row) {
+      return row.sharedId === sharedId;
+    });
+    if (!s) {
+      state.error = 'Session not found.';
+      renderSessions();
+      return;
+    }
+    setBusy(true);
+    try {
+      var answers = await answersForSession(sharedId);
+      for (var i = 0; i < answers.length; i++) {
+        await deleteEntityBySharedId(answers[i].sharedId);
+      }
+      await deleteEntityBySharedId(sharedId);
+      state.sessions = state.sessions.filter(function (row) {
+        return row.sharedId !== sharedId;
+      });
+      state.error = null;
+      renderSessions();
+    } catch (e) {
+      state.error = e.message || String(e);
+      renderSessions();
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function reopenSession(sharedId) {
@@ -4314,6 +4414,14 @@
       };
       var token = metaVal(s, 'poll_token');
       if (token) metadata.poll_token = [{ value: token }];
+      var answered = metaVal(s, 'poll_answered_count');
+      var qCount = metaVal(s, 'poll_question_count');
+      if (answered !== undefined && answered !== null && answered !== '') {
+        metadata.poll_answered_count = [{ value: answered }];
+      }
+      if (qCount !== undefined && qCount !== null && qCount !== '') {
+        metadata.poll_question_count = [{ value: qCount }];
+      }
       var saved = await api('POST', '/api/entities', {
         _id: s._id,
         sharedId: s.sharedId,
