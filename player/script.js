@@ -45,6 +45,7 @@
   var root = document.getElementById('poll-player');
   if (!root) return;
   var titleEl = document.getElementById('pp-title');
+  var previewBannerEl = document.getElementById('pp-preview-banner');
   var cardEl = document.getElementById('pp-card') || root;
 
   var state = {
@@ -56,6 +57,8 @@
     user: null,
     session: null,
     token: null,
+    /** Admin Open link: browse answers without writing. */
+    preview: false,
     answersByQuestion: {},
     busy: false,
     done: false,
@@ -258,6 +261,12 @@
       titleEl.hidden = true;
       titleEl.textContent = '';
     }
+  }
+
+  function setPreviewBanner(visible) {
+    if (!previewBannerEl) return;
+    previewBannerEl.hidden = !visible;
+    root.classList.toggle('pp-is-preview', !!visible);
   }
 
   function renderShell(html) {
@@ -752,7 +761,7 @@
   }
 
   function renderQuestion() {
-    if (state.done) {
+    if (state.done && !state.preview) {
       renderShell(
         '<div class="pp-done">' +
           '<h2>Thank you</h2>' +
@@ -832,13 +841,20 @@
       (state.index === 0 ? ' disabled' : '') +
       '>Previous</button>';
     var isLast = state.index === state.items.length - 1;
-    var canSkip = !isLast && isAnswerable(q);
+    var canSkip = !state.preview && !isLast && isAnswerable(q);
     html += '<div class="pp-actions-end">';
     if (canSkip) {
       html +=
         '<button type="button" class="pp-skip" id="pp-skip" title="Leave unanswered and go to the next item">Skip</button>';
     }
-    if (isLast) {
+    if (state.preview) {
+      if (!isLast) {
+        html += '<button type="button" class="primary" id="pp-next">Next</button>';
+      } else {
+        html +=
+          '<span class="pp-muted pp-preview-end">End of preview</span>';
+      }
+    } else if (isLast) {
       html += '<button type="button" class="primary" id="pp-accept">Accept &amp; finish</button>';
     } else {
       html += '<button type="button" class="primary" id="pp-next">Next</button>';
@@ -846,6 +862,13 @@
     html += '</div></div>';
 
     renderShell(html);
+
+    if (state.preview) {
+      var locks = root.querySelectorAll('input, textarea, select');
+      for (var li = 0; li < locks.length; li++) {
+        locks[li].disabled = true;
+      }
+    }
 
     var errEl = document.getElementById('pp-err');
     function showErr(msg) {
@@ -882,6 +905,7 @@
     /** @param {{ allowEmpty?: boolean }} [opts] */
     async function saveCurrent(opts) {
       opts = opts || {};
+      if (state.preview) return true;
       if (!isAnswerable(q)) return true;
       var form = readForm(q);
       if (opts.allowEmpty && !formHasInput(form)) {
@@ -1014,25 +1038,77 @@
     var saved = await api('POST', '/api/entities', payload);
     var entity = saved.entity || saved;
     state.answersByQuestion[q.sharedId] = entity;
+    await persistSessionProgress();
     return entity;
   }
 
-  async function acceptSession() {
+  function sessionProgressFields() {
+    var stats = overallAnswerStats();
+    return {
+      poll_answered_count: [{ value: stats.answered }],
+      poll_question_count: [{ value: stats.total }],
+    };
+  }
+
+  function buildSessionMetadata(overrides) {
+    var s = state.session;
     var metadata = {
       poll_poll: [{ value: state.pollId }],
-      poll_session_status: [{ value: CONFIG.sessionStatus.accepted }],
+      poll_session_status: [
+        {
+          value:
+            metaVal(s, 'poll_session_status') || CONFIG.sessionStatus.in_progress,
+        },
+      ],
       poll_respondent: [
         {
           value:
-            metaVal(state.session, 'poll_respondent') ||
+            metaVal(s, 'poll_respondent') ||
             (state.user && state.user.username) ||
+            s.title ||
             '',
         },
       ],
-      poll_accepted_at: [{ value: Math.floor(Date.now() / 1000) }],
     };
-    var token = metaVal(state.session, 'poll_token');
+    var token = metaVal(s, 'poll_token');
     if (token) metadata.poll_token = [{ value: token }];
+    var acceptedAt = metaVal(s, 'poll_accepted_at');
+    if (acceptedAt !== undefined && acceptedAt !== null && acceptedAt !== '') {
+      metadata.poll_accepted_at = [{ value: acceptedAt }];
+    } else {
+      metadata.poll_accepted_at = [];
+    }
+    var progress = sessionProgressFields();
+    metadata.poll_answered_count = progress.poll_answered_count;
+    metadata.poll_question_count = progress.poll_question_count;
+    if (overrides) {
+      Object.keys(overrides).forEach(function (key) {
+        metadata[key] = overrides[key];
+      });
+    }
+    return metadata;
+  }
+
+  async function persistSessionProgress() {
+    if (state.preview || !state.session) return;
+    var payload = {
+      _id: state.session._id,
+      sharedId: state.session.sharedId,
+      title: state.session.title,
+      template: CONFIG.templates.Session,
+      published: false,
+      language: 'en',
+      metadata: buildSessionMetadata(),
+    };
+    var saved = await api('POST', '/api/entities', payload);
+    state.session = saved.entity || saved;
+  }
+
+  async function acceptSession() {
+    var metadata = buildSessionMetadata({
+      poll_session_status: [{ value: CONFIG.sessionStatus.accepted }],
+      poll_accepted_at: [{ value: Math.floor(Date.now() / 1000) }],
+    });
     var payload = {
       _id: state.session._id,
       sharedId: state.session.sharedId,
@@ -1154,6 +1230,8 @@
     var params = new URLSearchParams(window.location.search);
     state.pollId = params.get('poll') || '';
     state.token = params.get('token') || '';
+    state.preview = params.get('preview') === '1';
+    setPreviewBanner(state.preview);
     if (!state.pollId || !state.token) {
       var siteMissing = await loadSiteName();
       var missingBits = [];
@@ -1212,7 +1290,16 @@
       await loadSessionByToken(state.token);
       await loadAnswers();
 
-      if (!state.done) {
+      if (!state.preview) {
+        try {
+          await persistSessionProgress();
+        } catch (progressErr) {
+          // Progress cache is best-effort; answering still works.
+          console.warn('Could not update session progress', progressErr);
+        }
+      }
+
+      if (!state.done || state.preview) {
         var resume = 0;
         for (var i = 0; i < state.items.length; i++) {
           var q = state.items[i].question;

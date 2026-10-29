@@ -38,6 +38,26 @@
   line-height: 1.45;
 }
 
+.pp-preview-banner {
+  margin: 0 0 0.75rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: var(--pp-radius-sm);
+  border: 1px solid color-mix(in srgb, var(--pp-warning) 35%, var(--pp-border));
+  background: var(--pp-warning-bg);
+  color: var(--pp-ink);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.pp-preview-banner[hidden] {
+  display: none !important;
+}
+
+.pp-preview-end {
+  font-size: 0.8125rem;
+  align-self: center;
+}
+
 .pp-poll-name {
   display: block;
   margin: 0 0 0.4rem;
@@ -207,7 +227,7 @@
   border-radius: var(--pp-radius-sm);
   cursor: pointer;
   background: var(--pp-paper);
-  transition: border-color 0.12s ease, background-color 0.12s ease;
+  transition: border-color 0.12s ease, background-color 0.12s ease, color 0.12s ease;
 }
 
 .pp-options label:hover {
@@ -215,9 +235,24 @@
   background: var(--pp-warm);
 }
 
+.pp-options label:has(input:checked) {
+  background: color-mix(in srgb, var(--pp-success-bg) 75%, var(--pp-paper));
+  border-color: color-mix(in srgb, var(--pp-success) 35%, var(--pp-border));
+  color: var(--pp-success);
+}
+
+.pp-options label:has(input:checked):hover {
+  background: var(--pp-success-bg);
+  border-color: color-mix(in srgb, var(--pp-success) 45%, var(--pp-border));
+}
+
 .pp-options input {
   margin-top: 0.2rem;
   accent-color: var(--pp-ink);
+}
+
+.pp-options label:has(input:checked) input {
+  accent-color: var(--pp-success);
 }
 
 .pp-actions {

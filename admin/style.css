@@ -201,6 +201,67 @@
   margin: 0.1rem 0.15rem 0.1rem 0;
 }
 
+/* Sessions: keep action buttons on one row in their own column (no overflow into dates). */
+.pa-table.pa-sessions-table td {
+  vertical-align: middle;
+}
+
+.pa-table.pa-sessions-table .pa-row-actions {
+  white-space: nowrap;
+}
+
+.pa-table.pa-sessions-table .pa-row-actions .pa-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+}
+
+.pa-icon-btn {
+  padding: 0.35rem 0.45rem;
+  line-height: 0;
+}
+
+.pa-icon-btn .pa-icon {
+  width: 1rem;
+  height: 1rem;
+  display: block;
+}
+
+.pa-icon-btn.pa-copied {
+  border-color: color-mix(in srgb, var(--pa-success) 45%, var(--pa-border));
+  background: var(--pa-success-bg);
+}
+
+.pa-sess-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  max-width: 9.5rem;
+}
+
+.pa-sess-bar {
+  flex: 0 0 3.75rem;
+  width: 3.75rem;
+  height: 6px;
+  background: var(--pa-warm);
+  border: 1px solid var(--pa-border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.pa-sess-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--pa-ink);
+}
+
+.pa-sess-progress-label {
+  font-size: 0.75rem;
+  color: var(--pa-ink-secondary);
+  white-space: nowrap;
+}
+
 .pa-issue-list {
   margin: 0;
   padding-left: 1.1rem;

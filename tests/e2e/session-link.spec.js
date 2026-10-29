@@ -22,7 +22,7 @@ test.describe('Session copy link', () => {
     }
   });
 
-  test('Copy link uses this instance Poll player path (not a hardcoded sharedId)', async ({
+  test('Open preview and copy share link use this instance Poll player path', async ({
     page,
     context,
     request,
@@ -47,6 +47,20 @@ test.describe('Session copy link', () => {
     await expect(sessionsBtn).toBeVisible({ timeout: 30_000 });
     await sessionsBtn.click();
 
+    await expect(page.locator('.pa-table thead')).not.toContainText('Token');
+    await expect(page.locator('.pa-del-session')).toBeVisible({ timeout: 30_000 });
+
+    const openLink = page.locator('.pa-open-session');
+    await expect(openLink).toBeVisible({ timeout: 30_000 });
+    const openHref = await openLink.getAttribute('data-href');
+    expect(openHref).toBeTruthy();
+    const openUrl = new URL(openHref);
+    expect(openUrl.origin).toBe(new URL(baseURL).origin);
+    expect(openUrl.pathname).toBe(expectedPath);
+    expect(openUrl.searchParams.get('poll')).toBe(fixture.poll.sharedId);
+    expect(openUrl.searchParams.get('token')).toBe(sessionInfo.token);
+    expect(openUrl.searchParams.get('preview')).toBe('1');
+
     const copyBtn = page.locator('.pa-copy-link');
     await expect(copyBtn).toBeVisible({ timeout: 30_000 });
     expect(await copyBtn.getAttribute('data-token')).toBe(sessionInfo.token);
@@ -69,14 +83,19 @@ test.describe('Session copy link', () => {
     expect(url.pathname).toBe(expectedPath);
     expect(url.searchParams.get('poll')).toBe(fixture.poll.sharedId);
     expect(url.searchParams.get('token')).toBe(sessionInfo.token);
+    expect(url.searchParams.get('preview')).toBeNull();
 
-    // Link should load the player (not 404).
-    await page.goto(copied);
+    // Preview link loads player read-only.
+    await page.goto(openHref);
     await expect(page.locator('#poll-player #pp-card')).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.locator('#poll-player #pp-preview-banner')).toBeVisible({
       timeout: 30_000,
     });
     await expect(page.locator('#pp-card .pp-qtext')).toBeVisible({
       timeout: 30_000,
     });
+    await expect(page.locator('#pp-accept')).toHaveCount(0);
   });
 });
