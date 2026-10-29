@@ -253,6 +253,57 @@ async function createPollSession(request, pollSharedId, token) {
 }
 
 /**
+ * Soft-claim / pre-assign a session to a user (hub lists these).
+ * @param {import('@playwright/test').APIRequestContext} request
+ * @param {object} session
+ * @param {{ _id: string, username?: string, email?: string }} user
+ * @param {string} [token]
+ */
+async function assignSessionToUser(request, session, user, token) {
+  const schema = await resolvePollSchema(request);
+  const label = user.username || user.email || String(user._id);
+  const tok = token || ((((session.metadata || {}).poll_token || [])[0] || {}).value);
+  const metadata = {
+    poll_poll: (session.metadata && session.metadata.poll_poll) || [],
+    poll_session_status: [
+      {
+        value:
+          (((session.metadata || {}).poll_session_status || [])[0] || {}).value ||
+          schema.sessionStatus.in_progress,
+      },
+    ],
+    poll_respondent: [
+      {
+        value: (((session.metadata || {}).poll_respondent || [])[0] || {}).value || 'e2e',
+      },
+    ],
+    poll_claimed_by: [{ value: label }],
+    poll_claimed_user: [{ value: String(user._id) }],
+  };
+  if (tok) metadata.poll_token = [{ value: tok }];
+  const answered = (((session.metadata || {}).poll_answered_count || [])[0] || {}).value;
+  const qCount = (((session.metadata || {}).poll_question_count || [])[0] || {}).value;
+  if (answered !== undefined) metadata.poll_answered_count = [{ value: answered }];
+  if (qCount !== undefined) metadata.poll_question_count = [{ value: qCount }];
+
+  const saved = await api(request, 'POST', '/api/entities', {
+    _id: session._id,
+    sharedId: session.sharedId,
+    title: session.title,
+    template: schema.templates.Session,
+    published: false,
+    language: 'en',
+    metadata,
+  });
+  const ent = saved.entity || saved;
+  await api(request, 'POST', '/api/entities/permissions', {
+    ids: [session.sharedId],
+    permissions: [{ refId: String(user._id), type: 'user', level: 'write' }],
+  });
+  return ent;
+}
+
+/**
  * Answers for a session, newest-first by title for stable assertions.
  * @param {import('@playwright/test').APIRequestContext} request
  * @param {string} sessionSharedId
@@ -339,6 +390,7 @@ module.exports = {
   ensureRespondentsGroup,
   grantRespondentsAccess,
   createPollSession,
+  assignSessionToUser,
   answersForSession,
   findEntityByTitle,
   findQuestionByText,
