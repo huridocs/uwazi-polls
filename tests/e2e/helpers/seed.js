@@ -97,11 +97,14 @@ async function seedTwoSectionPoll(request) {
     poll_poll: [{ value: poll.sharedId }],
   });
 
+  const sharedIds = [poll.sharedId, secA.sharedId, secB.sharedId, qA.sharedId, qB.sharedId];
+  await grantRespondentsAccess(request, sharedIds, 'read');
+
   return {
     poll,
     sections: [secA, secB],
     questions: [qA, qB],
-    sharedIds: [poll.sharedId, secA.sharedId, secB.sharedId, qA.sharedId, qB.sharedId],
+    sharedIds,
   };
 }
 
@@ -167,6 +170,69 @@ async function questionOrderByNumber(request, sectionSharedId) {
   return rows.map(r => r.title);
 }
 
+const RESPONDENTS_GROUP_NAME = '[Poll] Respondents';
+
+/**
+ * Ensure “[Poll] Respondents” exists (admin login required).
+ * @param {import('@playwright/test').APIRequestContext} request
+ */
+async function ensureRespondentsGroup(request) {
+  const rows = await api(request, 'GET', '/api/usergroups');
+  const list = Array.isArray(rows) ? rows : rows?.rows || [];
+  let found = list.find(
+    g => String(g.name || '').trim().toLowerCase() === RESPONDENTS_GROUP_NAME.toLowerCase()
+  );
+  if (!found) {
+    found = await api(request, 'POST', '/api/usergroups', {
+      name: RESPONDENTS_GROUP_NAME,
+      members: [],
+    });
+  }
+  return found;
+}
+
+/**
+ * Merge Respondents group access onto entities (bulk merge when 2+ ids).
+ * @param {import('@playwright/test').APIRequestContext} request
+ * @param {string[]} sharedIds
+ * @param {'read'|'write'} level
+ */
+async function grantRespondentsAccess(request, sharedIds, level) {
+  const ids = (sharedIds || []).filter(Boolean).map(String);
+  if (!ids.length) return;
+  const group = await ensureRespondentsGroup(request);
+  const groupId = String(group._id);
+  const chunkSize = 40;
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    if (chunk.length === 1) {
+      const current = await api(request, 'PUT', '/api/entities/permissions/', {
+        sharedIds: chunk,
+      });
+      const next = [];
+      (current || []).forEach(p => {
+        if (!p || p.type === 'public' || p.level === 'mixed') return;
+        if (String(p.refId) === groupId) return;
+        next.push({
+          refId: String(p.refId),
+          type: p.type,
+          level: p.level === 'write' ? 'write' : 'read',
+        });
+      });
+      next.push({ refId: groupId, type: 'group', level });
+      await api(request, 'POST', '/api/entities/permissions', {
+        ids: chunk,
+        permissions: next,
+      });
+    } else {
+      await api(request, 'POST', '/api/entities/permissions', {
+        ids: chunk,
+        permissions: [{ refId: groupId, type: 'group', level }],
+      });
+    }
+  }
+}
+
 /**
  * Create an in-progress session for a poll (player needs ?poll=&token=).
  * @param {import('@playwright/test').APIRequestContext} request
@@ -182,6 +248,7 @@ async function createPollSession(request, pollSharedId, token) {
     poll_respondent: [{ value: 'e2e' }],
     poll_token: [{ value: tok }],
   });
+  await grantRespondentsAccess(request, [session.sharedId], 'write');
   return { session, token: tok };
 }
 
@@ -269,10 +336,13 @@ module.exports = {
   deleteEntities,
   sectionOrderByNumber,
   questionOrderByNumber,
+  ensureRespondentsGroup,
+  grantRespondentsAccess,
   createPollSession,
   answersForSession,
   findEntityByTitle,
   findQuestionByText,
   loadSession,
   deleteAnswersForSession,
+  RESPONDENTS_GROUP_NAME,
 };

@@ -16,6 +16,8 @@
       Session: '',
       Answer: '',
     },
+    /** Cached [Poll] Respondents group (_id) once resolved. */
+    respondentsGroupId: '',
     qType: {
       choice: '',
       free_text: '',
@@ -54,6 +56,9 @@
 
   /** Match by name/label only; ids are refreshed from whatever exists on the instance. */
   var NS = '[Poll] ';
+  var RESPONDENTS_GROUP_NAME =
+    (typeof PollRespondentsAcl !== 'undefined' && PollRespondentsAcl.RESPONDENTS_GROUP_NAME) ||
+    NS + 'Respondents';
 
   var EXPECTED_RELATION_TYPES = [
     { key: 'belongs', name: NS + 'belongs to' },
@@ -202,6 +207,8 @@
         { name: 'poll_token', label: 'Poll token', type: 'text' },
         { name: 'poll_answered_count', label: 'Poll answered count', type: 'numeric' },
         { name: 'poll_question_count', label: 'Poll question count', type: 'numeric' },
+        { name: 'poll_claimed_by', label: 'Poll claimed by', type: 'text' },
+        { name: 'poll_claimed_user', label: 'Poll claimed user', type: 'text' },
       ],
     },
     {
@@ -261,6 +268,10 @@
     editingSection: null,
     editingQuestion: null,
     editingSession: null,
+    sessionAssignee: null,
+    sessionRespondentDraft: '',
+    respondentCandidates: null,
+    respondentCandidatesError: null,
     optionDraft: [], // [{ value, label }] linked options while editing a question
     optionsCache: null, // Option entities once loaded
     allTemplates: null, // raw /api/templates rows
@@ -269,6 +280,8 @@
     templateReport: null,
     thesaurusReport: null,
     relationTypeReport: null,
+    respondentsReport: null,
+    respondentsRepairSummary: null,
     // Import modal
     importSource: 'sm', // sm | json
     importToken: '',
@@ -424,6 +437,215 @@
     var data = await api(method, path, body);
     await sleep(10);
     return data;
+  }
+
+  /**
+   * Resolve or create the [Poll] Respondents user group.
+   * GET/POST /api/usergroups is admin-only — editors get a clear error.
+   */
+  async function ensureRespondentsGroup(opts) {
+    opts = opts || {};
+    if (CONFIG.respondentsGroupId && !opts.forceReload) {
+      return { _id: CONFIG.respondentsGroupId, name: RESPONDENTS_GROUP_NAME };
+    }
+    var rows;
+    try {
+      rows = await api('GET', '/api/usergroups');
+    } catch (e) {
+      var msg = e.message || String(e);
+      if (/403|401|Insufficient|Forbidden/i.test(msg)) {
+        throw new Error(
+          'Looking up user groups requires an admin account. Ask an admin to open Configuration and create “[Poll] Respondents”.'
+        );
+      }
+      throw e;
+    }
+    var list = Array.isArray(rows) ? rows : rows && rows.rows ? rows.rows : [];
+    var found = list.find(function (g) {
+      return nameEq(g.name, RESPONDENTS_GROUP_NAME);
+    });
+    if (found && found._id) {
+      CONFIG.respondentsGroupId = String(found._id);
+      if (opts.forceReload) state.respondentCandidates = null;
+      return found;
+    }
+    if (opts.create === false) return null;
+    try {
+      var created = await api('POST', '/api/usergroups', {
+        name: RESPONDENTS_GROUP_NAME,
+        members: [],
+      });
+      if (created && created._id) {
+        CONFIG.respondentsGroupId = String(created._id);
+        state.respondentCandidates = null;
+        return created;
+      }
+      throw new Error('User group create returned no id');
+    } catch (e2) {
+      var msg2 = e2.message || String(e2);
+      if (/403|401|Insufficient|Forbidden/i.test(msg2)) {
+        throw new Error(
+          'Creating “[Poll] Respondents” requires an admin account. Ask an admin to run Configuration once.'
+        );
+      }
+      throw e2;
+    }
+  }
+
+  /**
+   * Grant [Poll] Respondents access on entities.
+   * - Multiple ids: bulk merge (does not remove other grants).
+   * - Single id: read-merge-replace so we do not wipe other grants.
+   */
+  async function grantRespondentsAccess(sharedIds, level) {
+    var ids = (sharedIds || []).filter(Boolean).map(String);
+    if (!ids.length) return;
+    var group = await ensureRespondentsGroup();
+    var groupId = String(group._id);
+    var chunkSize = 40;
+    for (var i = 0; i < ids.length; i += chunkSize) {
+      var chunk = ids.slice(i, i + chunkSize);
+      if (chunk.length === 1) {
+        var current = await api('PUT', '/api/entities/permissions/', {
+          sharedIds: chunk,
+        });
+        var next = [];
+        (current || []).forEach(function (p) {
+          if (!p || p.type === 'public' || p.level === 'mixed') return;
+          if (String(p.refId) === groupId) return;
+          next.push({
+            refId: String(p.refId),
+            type: p.type,
+            level: p.level === 'write' ? 'write' : 'read',
+          });
+        });
+        next.push({ refId: groupId, type: 'group', level: level });
+        await api('POST', '/api/entities/permissions', {
+          ids: chunk,
+          permissions: next,
+        });
+      } else {
+        await api('POST', '/api/entities/permissions', {
+          ids: chunk,
+          permissions: [{ refId: groupId, type: 'group', level: level }],
+        });
+      }
+      await sleep(10);
+    }
+  }
+
+  async function grantStructureRead(sharedId) {
+    if (!sharedId) return;
+    try {
+      await grantRespondentsAccess([sharedId], 'read');
+    } catch (e) {
+      console.warn('Could not grant Respondents read on', sharedId, e);
+    }
+  }
+
+  async function grantSessionClaimable(sharedId) {
+    if (!sharedId) return;
+    try {
+      await grantRespondentsAccess([sharedId], 'write');
+    } catch (e) {
+      console.warn('Could not grant Respondents write on session', sharedId, e);
+    }
+  }
+
+  /** Pre-allocate / soft-claim: only this user keeps write (single-id replace). */
+  async function grantSessionToUser(sharedId, userId) {
+    if (!sharedId || !userId) return;
+    await api('POST', '/api/entities/permissions', {
+      ids: [String(sharedId)],
+      permissions:
+        typeof PollRespondentsAcl !== 'undefined'
+          ? PollRespondentsAcl.claimPermissionsPayload(userId)
+          : [{ refId: String(userId), type: 'user', level: 'write' }],
+    });
+  }
+
+  /** True if Session already claimed by a single user (no group grant). */
+  function sessionLooksClaimed(permissionMembers) {
+    if (typeof PollRespondentsAcl !== 'undefined' && PollRespondentsAcl.sessionLooksClaimed) {
+      return PollRespondentsAcl.sessionLooksClaimed(permissionMembers);
+    }
+    var nonPublic = (permissionMembers || []).filter(function (p) {
+      return p && p.type !== 'public' && p.level !== 'mixed';
+    });
+    var groups = nonPublic.filter(function (p) {
+      return p.type === 'group';
+    });
+    var users = nonPublic.filter(function (p) {
+      return p.type === 'user' && p.level === 'write';
+    });
+    return groups.length === 0 && users.length >= 1;
+  }
+
+  /**
+   * Audit + repair Respondents ACL on existing poll entities.
+   * Structure → group read; unclaimed Sessions → group write (claimable).
+   */
+  async function repairRespondentsPermissions() {
+    var group = await ensureRespondentsGroup();
+    var report = {
+      groupId: String(group._id),
+      structureChecked: 0,
+      structureRepaired: 0,
+      sessionsChecked: 0,
+      sessionsRepaired: 0,
+      sessionsClaimedSkipped: 0,
+      errors: [],
+    };
+
+    async function processTemplate(templateId, level, kind) {
+      if (!templateId) return;
+      var rows = await searchByTemplate(templateId);
+      var need = [];
+      for (var i = 0; i < rows.length; i++) {
+        var ent = rows[i];
+        if (!ent || !ent.sharedId) continue;
+        if (kind === 'structure') report.structureChecked += 1;
+        else report.sessionsChecked += 1;
+        try {
+          var perms = await api('PUT', '/api/entities/permissions/', {
+            sharedIds: [ent.sharedId],
+          });
+          if (kind === 'session' && sessionLooksClaimed(perms)) {
+            report.sessionsClaimedSkipped += 1;
+            continue;
+          }
+          var has = (perms || []).some(function (p) {
+            return (
+              p &&
+              p.type === 'group' &&
+              String(p.refId) === report.groupId &&
+              (level === 'read' ? true : p.level === 'write')
+            );
+          });
+          // read grant: any group level (read or write) is enough for structure
+          if (kind === 'structure') {
+            has = (perms || []).some(function (p) {
+              return p && p.type === 'group' && String(p.refId) === report.groupId;
+            });
+          }
+          if (!has) need.push(ent.sharedId);
+        } catch (e) {
+          report.errors.push(ent.sharedId + ': ' + (e.message || String(e)));
+        }
+      }
+      if (need.length) {
+        await grantRespondentsAccess(need, level);
+        if (kind === 'structure') report.structureRepaired += need.length;
+        else report.sessionsRepaired += need.length;
+      }
+    }
+
+    await processTemplate(CONFIG.templates.Poll, 'read', 'structure');
+    await processTemplate(CONFIG.templates.Section, 'read', 'structure');
+    await processTemplate(CONFIG.templates.Question, 'read', 'structure');
+    await processTemplate(CONFIG.templates.Option, 'read', 'structure');
+    await processTemplate(CONFIG.templates.Session, 'write', 'session');
+    return report;
   }
 
   function docsLinkHtml(label) {
@@ -914,6 +1136,33 @@
     buildTemplateReport();
   }
 
+  async function buildRespondentsReport() {
+    var report = {
+      status: 'unknown',
+      groupId: '',
+      message: '',
+      canManageGroups: true,
+    };
+    try {
+      var group = await ensureRespondentsGroup({ create: false, forceReload: true });
+      if (!group) {
+        report.status = 'missing';
+        report.message = 'Group “[Poll] Respondents” not found.';
+      } else {
+        report.status = 'ok';
+        report.groupId = String(group._id);
+        report.message = 'Group ready. Add collaborator users to it under Settings → Users & Groups.';
+        CONFIG.respondentsGroupId = report.groupId;
+      }
+    } catch (e) {
+      report.status = 'error';
+      report.message = e.message || String(e);
+      report.canManageGroups = !/admin account/i.test(report.message);
+    }
+    state.respondentsReport = report;
+    return report;
+  }
+
   function buildTemplateReport() {
     var report = EXPECTED_TEMPLATES.map(function (spec) {
       var found = findTemplateByName(spec.name);
@@ -1043,7 +1292,8 @@
       state.relationTypeReport.every(function (r) {
         return r.status === 'ok';
       });
-    return !!(tOk && thOk && rtOk);
+    var respOk = state.respondentsReport && state.respondentsReport.status === 'ok';
+    return !!(tOk && thOk && rtOk && respOk);
   }
 
   function configNeedsCreate() {
@@ -1060,7 +1310,11 @@
     var needRt = (state.relationTypeReport || []).some(function (r) {
       return r.status === 'missing';
     });
-    return needTpl || needTh || needRt;
+    var needResp =
+      !state.respondentsReport ||
+      state.respondentsReport.status === 'missing' ||
+      state.respondentsReport.status === 'error';
+    return needTpl || needTh || needRt || needResp;
   }
 
   function iconCheck() {
@@ -1082,7 +1336,8 @@
     var checked = !!(
       state.templateReport &&
       state.thesaurusReport &&
-      state.relationTypeReport
+      state.relationTypeReport &&
+      state.respondentsReport
     );
     var cls = 'pa-btn pa-config-btn';
     if (!checked) cls += ' pa-config-unknown';
@@ -1271,6 +1526,7 @@
         try {
           await loadConfigDeps();
           buildConfigReports();
+          await buildRespondentsReport();
           state.modal = 'config';
           state.modalError = null;
           renderList();
@@ -2170,6 +2426,7 @@
           },
         });
         var entity = saved.entity || saved;
+        await grantStructureRead(entity.sharedId);
         closeModal();
         state.error = null;
         await openPoll(entity.sharedId, 'structure');
@@ -2320,6 +2577,7 @@
           },
         });
         var entity = saved.entity || saved;
+        await grantStructureRead(entity.sharedId);
         state.sections.push(entity);
         sortSectionsLocal();
       } else {
@@ -2557,6 +2815,7 @@
         metadata: { poll_label: [{ value: label }] },
       });
       var ent = saved.entity || saved;
+      await grantStructureRead(ent.sharedId);
       if (state.optionsCache) {
         state.optionsCache.push(ent);
         state.optionsCache.sort(function (a, b) {
@@ -2935,6 +3194,7 @@
         });
       }
       if (isNew) {
+        await grantStructureRead(entity.sharedId);
         state.questions.push(entity);
         sortQuestionsLocal();
       } else {
@@ -3010,7 +3270,40 @@
     html += modalErrorHtml();
     html += '<div class="pa-form pa-config-form">';
     html +=
-      '<p class="pa-muted" style="margin:0 0 0.65rem">Matched by name/label (not fixed ids). Checks relationship types, thesauri values, templates, and property wiring. Create fills gaps without deleting existing data.</p>';
+      '<p class="pa-muted" style="margin:0 0 0.65rem">Matched by name/label (not fixed ids). Checks relationship types, thesauri, templates, the “[Poll] Respondents” group, and repairs group access on existing poll entities. Create fills gaps without deleting existing data.</p>';
+
+    var resp = state.respondentsReport;
+    html += '<h3 class="pa-config-section">Respondents access</h3>';
+    html += '<div class="pa-config-block">';
+    html +=
+      '<div class="pa-config-block-head"><strong>[Poll] Respondents</strong> ' +
+      configStatusPill(resp ? resp.status : 'unknown') +
+      '</div>';
+    html +=
+      '<p class="pa-muted" style="margin:0.35rem 0 0">' +
+      escapeHtml(
+        (resp && resp.message) ||
+          'Not checked yet. Re-check or run Create to ensure the group and entity permissions.'
+      ) +
+      '</p>';
+    if (state.respondentsRepairSummary) {
+      var rs = state.respondentsRepairSummary;
+      html +=
+        '<p class="pa-muted" style="margin:0.45rem 0 0">Last repair: structure fixed ' +
+        rs.structureRepaired +
+        '/' +
+        rs.structureChecked +
+        ', sessions fixed ' +
+        rs.sessionsRepaired +
+        '/' +
+        rs.sessionsChecked +
+        ' (skipped ' +
+        rs.sessionsClaimedSkipped +
+        ' claimed).' +
+        (rs.errors && rs.errors.length ? ' Errors: ' + rs.errors.length : '') +
+        '</p>';
+    }
+    html += '</div>';
 
     html += '<h3 class="pa-config-section">Relationship types</h3>';
     if (!rtReport.length) {
@@ -3111,9 +3404,11 @@
     html += '<button type="button" class="pa-btn" id="pa-cancel-modal">Close</button>';
     html +=
       '<button type="button" class="pa-btn" id="pa-config-recheck">Re-check</button>';
+    html +=
+      '<button type="button" class="pa-btn" id="pa-config-repair-acl">Repair Respondents access</button>';
     if (needsCreate) {
       html +=
-        '<button type="button" class="pa-btn primary" id="pa-config-create">Create the template structure</button>';
+        '<button type="button" class="pa-btn primary" id="pa-config-create">Create / repair configuration</button>';
     }
     html += '</div></div></div></div>';
     return html;
@@ -3137,6 +3432,26 @@
         setBusy(true);
         try {
           await loadConfigDeps();
+          buildConfigReports();
+          await buildRespondentsReport();
+          state.modalError = null;
+          renderList();
+        } catch (e) {
+          state.modalError = e.message || String(e);
+          renderList();
+        } finally {
+          setBusy(false);
+        }
+      });
+    }
+    var repairBtn = document.getElementById('pa-config-repair-acl');
+    if (repairBtn) {
+      repairBtn.addEventListener('click', async function () {
+        setBusy(true);
+        try {
+          await ensureRespondentsGroup({ create: true });
+          state.respondentsRepairSummary = await repairRespondentsPermissions();
+          await buildRespondentsReport();
           buildConfigReports();
           state.modalError = null;
           renderList();
@@ -3262,8 +3577,9 @@
         'Fill gaps in the poll configuration?\n\n' +
           '• Create missing relationship types (by name)\n' +
           '• Create missing thesauri / values (by label)\n' +
-          '• Create missing templates / properties (labels are Poll-prefixed so Uwazi names become poll_*)\n\n' +
-          'Existing items stay. Wrong property types are not changed.'
+          '• Create missing templates / properties (labels are Poll-prefixed so Uwazi names become poll_*)\n' +
+          '• Ensure “[Poll] Respondents” group and repair group access on existing poll entities\n\n' +
+          'Existing items stay. Wrong property types are not changed. Already-claimed sessions are left alone.'
       )
     ) {
       return;
@@ -3275,7 +3591,10 @@
       await loadConfigDeps();
       await ensureTemplates();
       await loadConfigDeps();
+      await ensureRespondentsGroup({ create: true });
+      state.respondentsRepairSummary = await repairRespondentsPermissions();
       buildConfigReports();
+      await buildRespondentsReport();
       state.modalError = null;
       state.error = null;
       state.modal = 'config';
@@ -3803,6 +4122,7 @@
         },
       });
       var ent = saved.entity || saved;
+      await grantStructureRead(ent.sharedId);
       cacheByLabel[key] = ent.sharedId;
       if (state.optionsCache) state.optionsCache.push(ent);
       delete cacheByLabel.__inflight[key];
@@ -3981,6 +4301,7 @@
         },
       });
       poll = pollSaved.entity || pollSaved;
+      var structureGrantIds = [poll.sharedId];
 
       var optionCache = {};
       var uniqueLabels = collectUniqueImportOptionLabels(preview);
@@ -3989,7 +4310,8 @@
         state.importProgress = 'Creating options… 0/' + uniqueLabels.length;
         renderList();
         await mapPool(uniqueLabels, IMPORT_CONCURRENCY, async function (lab) {
-          await ensureOptionEntity(lab, optionCache);
+          var optId = await ensureOptionEntity(lab, optionCache);
+          if (optId) structureGrantIds.push(optId);
           optDone += 1;
           if (optDone % 20 === 0 || optDone === uniqueLabels.length) {
             state.importProgress =
@@ -4035,6 +4357,9 @@
       });
       sectionResults.sort(function (a, b) {
         return a.index - b.index;
+      });
+      sectionResults.forEach(function (sr) {
+        if (sr.section && sr.section.sharedId) structureGrantIds.push(sr.section.sharedId);
       });
 
       var questionJobs = [];
@@ -4094,13 +4419,15 @@
             return { value: id };
           });
         }
-        await apiWrite('POST', '/api/entities', {
+        var qSaved = await apiWrite('POST', '/api/entities', {
           title: title,
           template: CONFIG.templates.Question,
           published: false,
           language: 'en',
           metadata: metadata,
         });
+        var qEnt = qSaved.entity || qSaved;
+        if (qEnt && qEnt.sharedId) structureGrantIds.push(qEnt.sharedId);
         createdItems += 1;
         if (createdItems % 20 === 0 || createdItems === wantItems) {
           state.importProgress =
@@ -4114,6 +4441,23 @@
           renderList();
         }
       });
+
+      state.importProgress = 'Sharing with Respondents…';
+      renderList();
+      try {
+        var uniqueGrantIds = [];
+        var seenGrant = {};
+        structureGrantIds.forEach(function (id) {
+          if (!id || seenGrant[id]) return;
+          seenGrant[id] = true;
+          uniqueGrantIds.push(id);
+        });
+        if (uniqueGrantIds.length) {
+          await grantRespondentsAccess(uniqueGrantIds, 'read');
+        }
+      } catch (grantErr) {
+        console.warn('Could not grant Respondents read after import', grantErr);
+      }
 
       state.importProgress = 'Verifying import…';
       renderList();
@@ -4215,27 +4559,29 @@
     } else {
       html +=
         '<table class="pa-table pa-sessions-table"><thead><tr>' +
-        '<th>Respondent</th><th>Status</th><th>Progress</th><th>Created</th><th>Accepted</th><th></th>' +
+        '<th>Respondent</th><th>Claimed by</th><th>Status</th><th>Progress</th><th></th>' +
         '</tr></thead><tbody>';
       state.sessions.forEach(function (s) {
         var token = metaVal(s, 'poll_token') || '';
         var respondent = metaVal(s, 'poll_respondent') || s.title || '—';
+        var claimedBy = metaVal(s, 'poll_claimed_by') || '';
         var st = sessionStatusLabel(s);
         var stCls =
           st === 'accepted' ? 'published' : st === 'in_progress' ? 'draft' : 'closed';
         html += '<tr>';
-        html += '<td>' + escapeHtml(respondent) + '</td>';
+        html +=
+          '<td><button type="button" class="pa-link pa-edit-session" data-id="' +
+          escapeHtml(s.sharedId) +
+          '">' +
+          escapeHtml(respondent) +
+          '</button></td>';
+        html +=
+          '<td class="pa-muted">' +
+          escapeHtml(claimedBy || '—') +
+          '</td>';
         html +=
           '<td><span class="pa-pill ' + stCls + '">' + escapeHtml(st) + '</span></td>';
         html += '<td>' + sessionProgressCellHtml(s) + '</td>';
-        html +=
-          '<td class="pa-muted">' +
-          escapeHtml(formatSessionDate(s.creationDate)) +
-          '</td>';
-        html +=
-          '<td class="pa-muted">' +
-          escapeHtml(formatSessionDate(metaVal(s, 'poll_accepted_at'))) +
-          '</td>';
         html += '<td class="pa-row-actions">';
         if (token) {
           var openHref =
@@ -4244,7 +4590,7 @@
           html +=
             '<button type="button" class="pa-btn pa-open-session" data-href="' +
             escapeHtml(openHref) +
-            '">Open</button>';
+            '">Preview</button>';
           html +=
             '<button type="button" class="pa-btn pa-icon-btn pa-copy-link" data-token="' +
             escapeHtml(token) +
@@ -4285,10 +4631,33 @@
     });
     document.getElementById('pa-add-session').addEventListener('click', function () {
       state.editingSession = { _new: true };
+      state.sessionAssignee = null;
+      state.sessionRespondentDraft = '';
       state.modal = 'session';
       state.modalError = null;
       renderSessions();
     });
+    var edits = cardEl.querySelectorAll('.pa-edit-session');
+    for (var e = 0; e < edits.length; e++) {
+      edits[e].addEventListener('click', function (ev) {
+        var id = ev.currentTarget.getAttribute('data-id');
+        var row = (state.sessions || []).find(function (s) {
+          return s.sharedId === id;
+        });
+        if (!row) return;
+        state.editingSession = row;
+        state.sessionRespondentDraft = metaVal(row, 'poll_respondent') || row.title || '';
+        var claimedUser = metaVal(row, 'poll_claimed_user');
+        var claimedBy = metaVal(row, 'poll_claimed_by');
+        state.sessionAssignee =
+          claimedUser
+            ? { refId: String(claimedUser), label: claimedBy || String(claimedUser) }
+            : null;
+        state.modal = 'session';
+        state.modalError = null;
+        renderSessions();
+      });
+    }
     var opens = cardEl.querySelectorAll('.pa-open-session');
     for (var o = 0; o < opens.length; o++) {
       opens[o].addEventListener('click', function (ev) {
@@ -4422,6 +4791,10 @@
       if (qCount !== undefined && qCount !== null && qCount !== '') {
         metadata.poll_question_count = [{ value: qCount }];
       }
+      var claimedBy = metaVal(s, 'poll_claimed_by');
+      var claimedUser = metaVal(s, 'poll_claimed_user');
+      if (claimedBy) metadata.poll_claimed_by = [{ value: claimedBy }];
+      if (claimedUser) metadata.poll_claimed_user = [{ value: String(claimedUser) }];
       var saved = await api('POST', '/api/entities', {
         _id: s._id,
         sharedId: s.sharedId,
@@ -4446,32 +4819,324 @@
     }
   }
 
+  /**
+   * Candidates for session assignment: members of “[Poll] Respondents”.
+   * Partial match is done client-side (Uwazi /api/collaborators is exact-only).
+   */
+  async function loadRespondentCandidates(opts) {
+    opts = opts || {};
+    if (state.respondentCandidates && !opts.forceReload) {
+      return state.respondentCandidates;
+    }
+    state.respondentCandidatesError = null;
+    try {
+      var groupRows = await api('GET', '/api/usergroups');
+      var groupList = Array.isArray(groupRows)
+        ? groupRows
+        : groupRows && groupRows.rows
+          ? groupRows.rows
+          : [];
+      var group = groupList.find(function (g) {
+        return nameEq(g.name, RESPONDENTS_GROUP_NAME);
+      });
+      if (!group) {
+        state.respondentCandidates = [];
+        state.respondentCandidatesError =
+          'Group “[Poll] Respondents” not found. Open Configuration and create it first.';
+        return state.respondentCandidates;
+      }
+      if (group._id) CONFIG.respondentsGroupId = String(group._id);
+      var memberIds = {};
+      (group.members || []).forEach(function (m) {
+        var id = m && (m.refId || m._id);
+        if (id) memberIds[String(id)] = true;
+      });
+      var users = await api('GET', '/api/users');
+      var list = Array.isArray(users) ? users : users && users.rows ? users.rows : [];
+      state.respondentCandidates = list
+        .filter(function (u) {
+          return u && u._id && memberIds[String(u._id)];
+        })
+        .map(function (u) {
+          return {
+            refId: String(u._id),
+            label: u.username || u.email || String(u._id),
+            username: u.username || '',
+            email: u.email || '',
+          };
+        })
+        .sort(function (a, b) {
+          return a.label.localeCompare(b.label);
+        });
+      if (!state.respondentCandidates.length) {
+        state.respondentCandidatesError =
+          'No members in “[Poll] Respondents” yet. Add collaborators under Settings → Users & Groups.';
+      }
+      return state.respondentCandidates;
+    } catch (e) {
+      state.respondentCandidates = [];
+      state.respondentCandidatesError = e.message || String(e);
+      return state.respondentCandidates;
+    }
+  }
+
+  function filterRespondentCandidates(query) {
+    var rows = state.respondentCandidates || [];
+    var q = String(query || '')
+      .trim()
+      .toLowerCase();
+    if (!q) return rows.slice(0, 12);
+    return rows
+      .filter(function (u) {
+        return (
+          (u.label && u.label.toLowerCase().indexOf(q) !== -1) ||
+          (u.username && u.username.toLowerCase().indexOf(q) !== -1) ||
+          (u.email && u.email.toLowerCase().indexOf(q) !== -1)
+        );
+      })
+      .slice(0, 12);
+  }
+
   function renderSessionModalHtml() {
+    var assignee = state.sessionAssignee;
+    var editing = state.editingSession;
+    var isNew = !!(editing && editing._new);
     var html = '';
     html += '<div class="pa-modal-backdrop" id="pa-modal-backdrop">';
     html += '<div class="pa-modal" role="dialog" aria-modal="true">';
-    html += '<h2>New session</h2>';
+    html += '<h2>' + (isNew ? 'New session' : 'Edit session') + '</h2>';
     html += modalErrorHtml();
     html += '<div class="pa-form">';
+    if (!isNew && editing) {
+      html +=
+        '<p class="pa-muted" style="margin:0 0 0.65rem">Created ' +
+        escapeHtml(formatSessionDate(editing.creationDate)) +
+        ' · Accepted ' +
+        escapeHtml(formatSessionDate(metaVal(editing, 'poll_accepted_at'))) +
+        ' · Status ' +
+        escapeHtml(sessionStatusLabel(editing)) +
+        '</p>';
+    }
     html +=
       '<div class="pa-field"><label for="pa-respondent">Respondent label</label>' +
-      '<input id="pa-respondent" type="text" placeholder="e.g. Country X — reviewer A" />' +
-      '<p class="pa-muted" style="margin:0.35rem 0 0">Free-text label only (not linked to a Uwazi user). A secret token is generated for the link.</p></div>';
+      '<input id="pa-respondent" type="text" placeholder="e.g. Country X — reviewer A" value="' +
+      escapeHtml(state.sessionRespondentDraft || '') +
+      '" />' +
+      '<p class="pa-muted" style="margin:0.35rem 0 0">Free-text label for the sessions list.' +
+      (isNew ? ' A secret token is generated for the link.' : '') +
+      '</p></div>';
+    html +=
+      '<div class="pa-field"><label for="pa-session-user">Assigned user (optional)</label>' +
+      '<div class="pa-opt-combo pa-session-user-combo">' +
+      '<input id="pa-session-user" type="text" autocomplete="off" placeholder="Type to filter [Poll] Respondents…"' +
+      (assignee ? ' value="' + escapeHtml(assignee.label) + '"' : '') +
+      ' aria-autocomplete="list" aria-controls="pa-session-user-results" aria-expanded="false" />' +
+      '<div id="pa-session-user-results" class="pa-opt-results" hidden></div></div>';
+    if (assignee && assignee.refId) {
+      html +=
+        '<p class="pa-session-user-selected">Assigned to <strong>' +
+        escapeHtml(assignee.label) +
+        '</strong> ' +
+        '<button type="button" class="pa-link" id="pa-session-user-clear">Clear</button></p>';
+    } else {
+      html +=
+        '<p class="pa-muted" style="margin:0.35rem 0 0">Searches members of “[Poll] Respondents” (partial match). Leave empty to let any member claim on first open.</p>';
+    }
+    html += '</div>';
     html += '<div class="pa-actions">';
     html += '<button type="button" class="pa-btn" id="pa-cancel-modal">Cancel</button>';
-    html += '<button type="button" class="pa-btn primary" id="pa-save-session">Create</button>';
+    html +=
+      '<button type="button" class="pa-btn primary" id="pa-save-session">' +
+      (isNew ? 'Create' : 'Save') +
+      '</button>';
     html += '</div></div></div></div>';
     return html;
+  }
+
+  function bindSessionUserPicker() {
+    var search = document.getElementById('pa-session-user');
+    var results = document.getElementById('pa-session-user-results');
+    if (!search || !results) return;
+
+    var debounceTimer = null;
+    var activeIndex = -1;
+    var latestQuery = 0;
+
+    function setExpanded(open) {
+      search.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
+    function closeResults() {
+      results.hidden = true;
+      results.innerHTML = '';
+      activeIndex = -1;
+      setExpanded(false);
+    }
+
+    function rememberRespondentDraft() {
+      var resp = document.getElementById('pa-respondent');
+      state.sessionRespondentDraft = resp ? resp.value : '';
+    }
+
+    function selectUser(refId, label) {
+      rememberRespondentDraft();
+      state.sessionAssignee = { refId: String(refId), label: label };
+      state.modalError = null;
+      renderSessions();
+    }
+
+    function clearUser() {
+      rememberRespondentDraft();
+      state.sessionAssignee = null;
+      state.modalError = null;
+      renderSessions();
+    }
+
+    var clearBtn = document.getElementById('pa-session-user-clear');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function () {
+        clearUser();
+      });
+    }
+
+    function paintResults(users, emptyMessage) {
+      if (!users.length) {
+        results.hidden = false;
+        setExpanded(true);
+        results.innerHTML =
+          '<p class="pa-muted" style="margin:0.45rem 0.65rem">' +
+          escapeHtml(emptyMessage || 'No users matched.') +
+          '</p>';
+        activeIndex = -1;
+        return;
+      }
+      var html = '<ul class="pa-opt-pick">';
+      users.forEach(function (u) {
+        var secondary =
+          u.email && u.email !== u.label
+            ? ' <span class="pa-muted">' + escapeHtml(u.email) + '</span>'
+            : '';
+        html +=
+          '<li role="presentation"><button type="button" class="pa-link pa-opt-pick-btn" role="option" data-id="' +
+          escapeHtml(String(u.refId)) +
+          '" data-label="' +
+          escapeHtml(u.label || '') +
+          '">' +
+          escapeHtml(u.label || String(u.refId)) +
+          secondary +
+          '</button></li>';
+      });
+      html += '</ul>';
+      results.innerHTML = html;
+      results.hidden = false;
+      setExpanded(true);
+      activeIndex = 0;
+      var buttons = results.querySelectorAll('.pa-opt-pick-btn');
+      for (var i = 0; i < buttons.length; i++) {
+        buttons[i].classList.toggle('pa-opt-pick-active', i === 0);
+        buttons[i].addEventListener('mousedown', function (ev) {
+          ev.preventDefault();
+        });
+        buttons[i].addEventListener('click', function (ev) {
+          var btn = ev.currentTarget;
+          selectUser(btn.getAttribute('data-id'), btn.getAttribute('data-label'));
+        });
+      }
+    }
+
+    async function runSearch(q, forceOpen) {
+      var reqId = ++latestQuery;
+      var term = String(q || '').trim();
+      if (!term && !forceOpen) {
+        closeResults();
+        return;
+      }
+      try {
+        await loadRespondentCandidates();
+        if (reqId !== latestQuery) return;
+        if (state.respondentCandidatesError && !(state.respondentCandidates || []).length) {
+          paintResults([], state.respondentCandidatesError);
+          return;
+        }
+        var users = filterRespondentCandidates(term);
+        paintResults(
+          users,
+          term
+            ? 'No [Poll] Respondents members matched.'
+            : 'No members in “[Poll] Respondents” yet.'
+        );
+      } catch (e) {
+        if (reqId !== latestQuery) return;
+        results.hidden = false;
+        setExpanded(true);
+        results.innerHTML =
+          '<p class="pa-error" style="margin:0.35rem">' +
+          escapeHtml(e.message || String(e)) +
+          '</p>';
+      }
+    }
+
+    search.addEventListener('input', function () {
+      if (state.sessionAssignee) {
+        state.sessionAssignee = null;
+      }
+      var q = (search.value || '').trim();
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(function () {
+        runSearch(q, false);
+      }, 180);
+    });
+
+    search.addEventListener('focus', function () {
+      if (state.sessionAssignee) return;
+      runSearch(search.value || '', true);
+    });
+
+    search.addEventListener('keydown', function (ev) {
+      var buttons = results.querySelectorAll('.pa-opt-pick-btn');
+      if (ev.key === 'Escape') {
+        closeResults();
+        return;
+      }
+      if (ev.key === 'ArrowDown' && buttons.length) {
+        ev.preventDefault();
+        activeIndex = Math.min(activeIndex + 1, buttons.length - 1);
+        for (var d = 0; d < buttons.length; d++) {
+          buttons[d].classList.toggle('pa-opt-pick-active', d === activeIndex);
+        }
+        return;
+      }
+      if (ev.key === 'ArrowUp' && buttons.length) {
+        ev.preventDefault();
+        activeIndex = Math.max(activeIndex - 1, 0);
+        for (var u = 0; u < buttons.length; u++) {
+          buttons[u].classList.toggle('pa-opt-pick-active', u === activeIndex);
+        }
+        return;
+      }
+      if (ev.key === 'Enter' && buttons.length && activeIndex >= 0 && buttons[activeIndex]) {
+        ev.preventDefault();
+        buttons[activeIndex].click();
+      }
+    });
+
+    search.addEventListener('blur', function () {
+      setTimeout(closeResults, 150);
+    });
   }
 
   function bindSessionModal() {
     var backdrop = document.getElementById('pa-modal-backdrop');
     document.getElementById('pa-cancel-modal').addEventListener('click', function () {
+      state.sessionAssignee = null;
+      state.sessionRespondentDraft = '';
       closeModal();
       renderSessions();
     });
     backdrop.addEventListener('click', function (ev) {
       if (ev.target === backdrop) {
+        state.sessionAssignee = null;
+        state.sessionRespondentDraft = '';
         closeModal();
         renderSessions();
       }
@@ -4479,6 +5144,7 @@
     document.getElementById('pa-save-session').addEventListener('click', async function () {
       await saveSessionModal();
     });
+    bindSessionUserPicker();
     var el = document.getElementById('pa-respondent');
     if (el) el.focus();
   }
@@ -4495,29 +5161,107 @@
       renderSessions();
       return;
     }
-    var token = generateToken();
+    var editing = state.editingSession;
+    var isNew = !!(editing && editing._new);
+    var assignee = state.sessionAssignee;
     setBusy(true);
     try {
-      var saved = await api('POST', '/api/entities', {
-        title: label + ' · ' + (state.poll.title || 'poll'),
-        template: CONFIG.templates.Session,
-        published: false,
-        language: 'en',
-        metadata: {
+      if (isNew) {
+        var token = generateToken();
+        var metadata = {
           poll_poll: [{ value: state.poll.sharedId }],
           poll_session_status: [{ value: CONFIG.sessionStatus.in_progress }],
           poll_respondent: [{ value: label }],
           poll_token: [{ value: token }],
-        },
-      });
-      var ent = saved.entity || saved;
-      if (!ent.metadata) ent.metadata = {};
-      // Ensure list can copy immediately even if API omits token on create response.
-      ent.metadata.poll_token = [{ value: token }];
-      ent.metadata.poll_respondent = [{ value: label }];
-      ent.metadata.poll_poll = [{ value: state.poll.sharedId }];
-      ent.metadata.poll_session_status = [{ value: CONFIG.sessionStatus.in_progress }];
-      state.sessions.unshift(ent);
+        };
+        if (assignee && assignee.refId) {
+          metadata.poll_claimed_by = [{ value: assignee.label || '' }];
+          metadata.poll_claimed_user = [{ value: String(assignee.refId) }];
+        }
+        var saved = await api('POST', '/api/entities', {
+          title: label + ' · ' + (state.poll.title || 'poll'),
+          template: CONFIG.templates.Session,
+          published: false,
+          language: 'en',
+          metadata: metadata,
+        });
+        var ent = saved.entity || saved;
+        if (!ent.metadata) ent.metadata = {};
+        ent.metadata.poll_token = [{ value: token }];
+        ent.metadata.poll_respondent = [{ value: label }];
+        ent.metadata.poll_poll = [{ value: state.poll.sharedId }];
+        ent.metadata.poll_session_status = [{ value: CONFIG.sessionStatus.in_progress }];
+        if (assignee && assignee.refId) {
+          ent.metadata.poll_claimed_by = [{ value: assignee.label || '' }];
+          ent.metadata.poll_claimed_user = [{ value: String(assignee.refId) }];
+          await grantSessionToUser(ent.sharedId, assignee.refId);
+        } else {
+          await grantSessionClaimable(ent.sharedId);
+        }
+        state.sessions.unshift(ent);
+      } else {
+        var prevToken = metaVal(editing, 'poll_token');
+        var updateMd = {
+          poll_poll: [{ value: metaVal(editing, 'poll_poll') || state.poll.sharedId }],
+          poll_session_status: [
+            {
+              value:
+                metaVal(editing, 'poll_session_status') || CONFIG.sessionStatus.in_progress,
+            },
+          ],
+          poll_respondent: [{ value: label }],
+        };
+        if (prevToken) updateMd.poll_token = [{ value: prevToken }];
+        var acceptedAt = metaVal(editing, 'poll_accepted_at');
+        if (acceptedAt !== undefined && acceptedAt !== null && acceptedAt !== '') {
+          updateMd.poll_accepted_at = [{ value: acceptedAt }];
+        } else {
+          updateMd.poll_accepted_at = [];
+        }
+        var answered = metaVal(editing, 'poll_answered_count');
+        var qCount = metaVal(editing, 'poll_question_count');
+        if (answered !== undefined && answered !== null && answered !== '') {
+          updateMd.poll_answered_count = [{ value: answered }];
+        }
+        if (qCount !== undefined && qCount !== null && qCount !== '') {
+          updateMd.poll_question_count = [{ value: qCount }];
+        }
+        if (assignee && assignee.refId) {
+          updateMd.poll_claimed_by = [{ value: assignee.label || '' }];
+          updateMd.poll_claimed_user = [{ value: String(assignee.refId) }];
+        } else {
+          updateMd.poll_claimed_by = [];
+          updateMd.poll_claimed_user = [];
+        }
+        var updated = await api('POST', '/api/entities', {
+          _id: editing._id,
+          sharedId: editing.sharedId,
+          title: label + ' · ' + (state.poll.title || 'poll'),
+          template: CONFIG.templates.Session,
+          published: false,
+          language: 'en',
+          metadata: updateMd,
+        });
+        var updatedEnt = updated.entity || updated;
+        if (!updatedEnt.metadata) updatedEnt.metadata = {};
+        if (prevToken) updatedEnt.metadata.poll_token = [{ value: prevToken }];
+        updatedEnt.metadata.poll_respondent = [{ value: label }];
+        if (assignee && assignee.refId) {
+          updatedEnt.metadata.poll_claimed_by = [{ value: assignee.label || '' }];
+          updatedEnt.metadata.poll_claimed_user = [{ value: String(assignee.refId) }];
+          await grantSessionToUser(updatedEnt.sharedId, assignee.refId);
+        } else {
+          updatedEnt.metadata.poll_claimed_by = [];
+          updatedEnt.metadata.poll_claimed_user = [];
+          await grantSessionClaimable(updatedEnt.sharedId);
+        }
+        var idx = state.sessions.findIndex(function (row) {
+          return row.sharedId === editing.sharedId;
+        });
+        if (idx >= 0) state.sessions[idx] = updatedEnt;
+      }
+      state.sessionAssignee = null;
+      state.sessionRespondentDraft = '';
       closeModal();
       state.error = null;
       renderSessions();
@@ -4542,10 +5286,12 @@
       try {
         await loadConfigDeps();
         buildConfigReports();
+        await buildRespondentsReport();
       } catch (ignore) {
         state.templateReport = null;
         state.thesaurusReport = null;
         state.relationTypeReport = null;
+        state.respondentsReport = null;
       }
       await loadPolls();
       state.view = 'list';

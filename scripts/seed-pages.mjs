@@ -16,7 +16,12 @@ function readPageFiles(folder) {
   // Admin import/export helpers live in lib/sm-details.js (also unit-tested).
   if (dir === 'admin') {
     const sm = fs.readFileSync(path.join(root, 'lib/sm-details.js'), 'utf8');
-    script = sm + '\n' + script;
+    const acl = fs.readFileSync(path.join(root, 'lib/respondents-acl.js'), 'utf8');
+    script = sm + '\n' + acl + '\n' + script;
+  }
+  if (dir === 'player') {
+    const acl = fs.readFileSync(path.join(root, 'lib/respondents-acl.js'), 'utf8');
+    script = acl + '\n' + script;
   }
   return {
     content: fs.readFileSync(path.join(root, dir, 'content.html'), 'utf8'),

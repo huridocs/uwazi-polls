@@ -120,6 +120,8 @@ const EXPECTED_TEMPLATES = [
       { label: 'Poll token', type: 'text' },
       { label: 'Poll answered count', type: 'numeric' },
       { label: 'Poll question count', type: 'numeric' },
+      { label: 'Poll claimed by', type: 'text' },
+      { label: 'Poll claimed user', type: 'text' },
     ],
   },
   {
@@ -318,6 +320,24 @@ await withSession(async api => {
       console.log('updated template', spec.name);
     }
   }
+
+  // Soft-claim respondents: empty group that admins populate with collaborator users.
+  const RESPONDENTS_GROUP_NAME = NS + 'Respondents';
+  let groups = await api('GET', '/api/usergroups');
+  const groupList = Array.isArray(groups) ? groups : groups?.rows || [];
+  let respondents = groupList.find(
+    g => String(g.name || '').trim().toLowerCase() === RESPONDENTS_GROUP_NAME.toLowerCase()
+  );
+  if (!respondents) {
+    respondents = await api('POST', '/api/usergroups', {
+      name: RESPONDENTS_GROUP_NAME,
+      members: [],
+    });
+    console.log('created user group', RESPONDENTS_GROUP_NAME);
+  } else {
+    console.log('user group ready', RESPONDENTS_GROUP_NAME);
+  }
+  ids.respondentsGroupId = respondents._id || respondents.id;
 
   console.log('poll schema ready');
 });

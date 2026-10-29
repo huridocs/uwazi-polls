@@ -1078,6 +1078,10 @@
     } else {
       metadata.poll_accepted_at = [];
     }
+    var claimedBy = metaVal(s, 'poll_claimed_by');
+    if (claimedBy) metadata.poll_claimed_by = [{ value: claimedBy }];
+    var claimedUser = metaVal(s, 'poll_claimed_user');
+    if (claimedUser) metadata.poll_claimed_user = [{ value: String(claimedUser) }];
     var progress = sessionProgressFields();
     metadata.poll_answered_count = progress.poll_answered_count;
     metadata.poll_question_count = progress.poll_question_count;
@@ -1087,6 +1091,35 @@
       });
     }
     return metadata;
+  }
+
+  function claimLabelForCurrentUser() {
+    if (typeof PollRespondentsAcl !== 'undefined' && PollRespondentsAcl.claimLabelFromUser) {
+      return PollRespondentsAcl.claimLabelFromUser(state.user);
+    }
+    return (
+      (state.user && (state.user.username || state.user.email || state.user._id)) ||
+      ''
+    );
+  }
+
+  async function persistSessionClaimMetadata(userId, label) {
+    if (!state.session) return;
+    var metadata = buildSessionMetadata({
+      poll_claimed_by: [{ value: label || claimLabelForCurrentUser() }],
+      poll_claimed_user: [{ value: String(userId) }],
+    });
+    var payload = {
+      _id: state.session._id,
+      sharedId: state.session.sharedId,
+      title: state.session.title,
+      template: CONFIG.templates.Session,
+      published: false,
+      language: 'en',
+      metadata: metadata,
+    };
+    var saved = await api('POST', '/api/entities', payload);
+    state.session = saved.entity || saved;
   }
 
   async function persistSessionProgress() {
@@ -1154,6 +1187,79 @@
     if (metaVal(state.session, 'poll_session_status') === CONFIG.sessionStatus.accepted) {
       state.done = true;
     }
+  }
+
+  /**
+   * Soft-claim: replace group write with this user's write so other Respondents
+   * lose the session after first open. Skipped in preview mode.
+   */
+  async function claimSessionIfNeeded() {
+    if (state.preview || !state.session || !state.session.sharedId) return;
+    if (!state.user || !state.user._id) return;
+    var userId = String(state.user._id);
+    var sharedId = state.session.sharedId;
+    var ACL = typeof PollRespondentsAcl !== 'undefined' ? PollRespondentsAcl : null;
+    var claimedUserMeta = metaVal(state.session, 'poll_claimed_user');
+    var allows = ACL
+      ? ACL.sessionAllowsUser(claimedUserMeta, userId)
+      : !claimedUserMeta || String(claimedUserMeta) === userId;
+    if (!allows) {
+      throw new Error(
+        'This session is assigned to another user. Ask an admin for a session link of your own.'
+      );
+    }
+    var perms;
+    try {
+      perms = await api('PUT', '/api/entities/permissions/', {
+        sharedIds: [sharedId],
+      });
+    } catch (e) {
+      console.warn('Could not read session permissions for claim', e);
+      return;
+    }
+    var looksClaimed = ACL
+      ? ACL.sessionLooksClaimed(perms)
+      : (function () {
+          var nonPublic = (perms || []).filter(function (p) {
+            return p && p.type !== 'public' && p.level !== 'mixed';
+          });
+          return (
+            !nonPublic.some(function (p) {
+              return p.type === 'group';
+            }) &&
+            nonPublic.some(function (p) {
+              return p.type === 'user' && p.level === 'write';
+            })
+          );
+        })();
+    if (looksClaimed) {
+      var mine = ACL
+        ? ACL.sessionClaimedByUser(perms, userId)
+        : (perms || []).some(function (p) {
+            return p && p.type === 'user' && p.level === 'write' && String(p.refId) === userId;
+          });
+      if (!mine) {
+        throw new Error(
+          'This session was already opened by another respondent. Ask an admin for a new session link.'
+        );
+      }
+      if (!metaVal(state.session, 'poll_claimed_user')) {
+        try {
+          await persistSessionClaimMetadata(userId, claimLabelForCurrentUser());
+        } catch (metaErr) {
+          console.warn('Could not persist claim metadata', metaErr);
+        }
+      }
+      return;
+    }
+    var payload = ACL
+      ? ACL.claimPermissionsPayload(userId)
+      : [{ refId: userId, type: 'user', level: 'write' }];
+    await api('POST', '/api/entities/permissions', {
+      ids: [sharedId],
+      permissions: payload,
+    });
+    await persistSessionClaimMetadata(userId, claimLabelForCurrentUser());
   }
 
   async function loadAnswers() {
@@ -1266,6 +1372,10 @@
     try {
       await resolveConfigFromInstance();
 
+      // Gate on session ACL / claim before loading poll content.
+      await loadSessionByToken(state.token);
+      await claimSessionIfNeeded();
+
       state.poll = await loadEntity(state.pollId);
       if (!state.poll) throw new Error('Poll not found.');
       setPollTitle(state.poll.title);
@@ -1287,7 +1397,6 @@
         return;
       }
 
-      await loadSessionByToken(state.token);
       await loadAnswers();
 
       if (!state.preview) {

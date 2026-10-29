@@ -8,6 +8,7 @@ const {
   createEntity,
   deleteEntities,
   createPollSession,
+  grantRespondentsAccess,
 } = require('./seed');
 
 /**
@@ -87,6 +88,8 @@ async function createMixedPollFixture(request) {
     qText.sharedId,
     qDate.sharedId,
   ];
+
+  await grantRespondentsAccess(request, sharedIds, 'read');
 
   return {
     poll,

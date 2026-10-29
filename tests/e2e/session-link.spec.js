@@ -52,6 +52,7 @@ test.describe('Session copy link', () => {
 
     const openLink = page.locator('.pa-open-session');
     await expect(openLink).toBeVisible({ timeout: 30_000 });
+    await expect(openLink).toHaveText('Preview');
     const openHref = await openLink.getAttribute('data-href');
     expect(openHref).toBeTruthy();
     const openUrl = new URL(openHref);

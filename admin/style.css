@@ -207,7 +207,28 @@
 }
 
 .pa-table.pa-sessions-table .pa-row-actions {
+  width: 1%;
   white-space: nowrap;
+}
+
+.pa-table.pa-sessions-table th:nth-child(1),
+.pa-table.pa-sessions-table td:nth-child(1) {
+  width: 28%;
+}
+
+.pa-table.pa-sessions-table th:nth-child(2),
+.pa-table.pa-sessions-table td:nth-child(2) {
+  width: 18%;
+}
+
+.pa-table.pa-sessions-table th:nth-child(3),
+.pa-table.pa-sessions-table td:nth-child(3) {
+  width: 12%;
+}
+
+.pa-table.pa-sessions-table th:nth-child(4),
+.pa-table.pa-sessions-table td:nth-child(4) {
+  width: 16%;
 }
 
 .pa-table.pa-sessions-table .pa-row-actions .pa-btn {
@@ -215,6 +236,15 @@
   align-items: center;
   justify-content: center;
   vertical-align: middle;
+}
+
+.pa-session-user-combo {
+  margin-top: 0.25rem;
+}
+
+.pa-session-user-selected {
+  margin: 0.45rem 0 0;
+  font-size: 0.92rem;
 }
 
 .pa-icon-btn {
