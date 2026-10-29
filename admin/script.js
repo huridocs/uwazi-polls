@@ -282,6 +282,7 @@
     relationTypeReport: null,
     respondentsReport: null,
     respondentsRepairSummary: null,
+    repairProgress: null,
     // Import modal
     importSource: 'sm', // sm | json
     importToken: '',
@@ -581,9 +582,20 @@
     return groups.length === 0 && users.length >= 1;
   }
 
+  var REPAIR_CONCURRENCY = 8;
+
+  function setRepairProgress(msg) {
+    state.repairProgress = msg || null;
+    if (state.modal === 'config') {
+      renderList();
+      if (state.busy) setBusy(true);
+    }
+  }
+
   /**
-   * Audit + repair Respondents ACL on existing poll entities.
-   * Structure → group read; unclaimed Sessions → group write (claimable).
+   * Repair Respondents ACL on existing poll entities.
+   * Structure: bulk-merge group read (no per-entity GET).
+   * Sessions: skip claimed (metadata or ACL); parallel-check the rest; bulk-merge write.
    */
   async function repairRespondentsPermissions() {
     var group = await ensureRespondentsGroup();
@@ -597,54 +609,107 @@
       errors: [],
     };
 
-    async function processTemplate(templateId, level, kind) {
+    async function repairStructure(label, templateId) {
       if (!templateId) return;
+      setRepairProgress('Listing ' + label + '…');
       var rows = await searchByTemplate(templateId);
-      var need = [];
+      var ids = [];
+      for (var i = 0; i < rows.length; i++) {
+        if (rows[i] && rows[i].sharedId) ids.push(rows[i].sharedId);
+      }
+      report.structureChecked += ids.length;
+      if (!ids.length) return;
+      setRepairProgress(
+        'Sharing ' + label + ' with Respondents… (' + ids.length + ' entities)'
+      );
+      try {
+        await grantRespondentsAccess(ids, 'read');
+        report.structureRepaired += ids.length;
+      } catch (e) {
+        report.errors.push(label + ': ' + (e.message || String(e)));
+      }
+    }
+
+    async function repairSessions() {
+      var templateId = CONFIG.templates.Session;
+      if (!templateId) return;
+      setRepairProgress('Listing sessions…');
+      var rows = await searchByTemplate(templateId);
+      var candidates = [];
       for (var i = 0; i < rows.length; i++) {
         var ent = rows[i];
         if (!ent || !ent.sharedId) continue;
-        if (kind === 'structure') report.structureChecked += 1;
-        else report.sessionsChecked += 1;
+        report.sessionsChecked += 1;
+        // Fast path: claim metadata means already assigned — do not re-add group write.
+        if (metaVal(ent, 'poll_claimed_user') || metaVal(ent, 'poll_claimed_by')) {
+          report.sessionsClaimedSkipped += 1;
+          continue;
+        }
+        candidates.push(ent);
+      }
+
+      var need = [];
+      var checked = 0;
+      var total = candidates.length;
+      setRepairProgress(
+        total
+          ? 'Checking unclaimed sessions… 0/' + total + ' (×' + REPAIR_CONCURRENCY + ')'
+          : 'No unclaimed sessions to check.'
+      );
+      await mapPool(candidates, REPAIR_CONCURRENCY, async function (ent) {
         try {
           var perms = await api('PUT', '/api/entities/permissions/', {
             sharedIds: [ent.sharedId],
           });
-          if (kind === 'session' && sessionLooksClaimed(perms)) {
+          if (sessionLooksClaimed(perms)) {
             report.sessionsClaimedSkipped += 1;
-            continue;
-          }
-          var has = (perms || []).some(function (p) {
-            return (
-              p &&
-              p.type === 'group' &&
-              String(p.refId) === report.groupId &&
-              (level === 'read' ? true : p.level === 'write')
-            );
-          });
-          // read grant: any group level (read or write) is enough for structure
-          if (kind === 'structure') {
-            has = (perms || []).some(function (p) {
-              return p && p.type === 'group' && String(p.refId) === report.groupId;
+          } else {
+            var hasWrite = (perms || []).some(function (p) {
+              return (
+                p &&
+                p.type === 'group' &&
+                String(p.refId) === report.groupId &&
+                p.level === 'write'
+              );
             });
+            if (!hasWrite) need.push(ent.sharedId);
           }
-          if (!has) need.push(ent.sharedId);
         } catch (e) {
           report.errors.push(ent.sharedId + ': ' + (e.message || String(e)));
         }
-      }
+        checked += 1;
+        if (checked === total || checked % 10 === 0) {
+          setRepairProgress(
+            'Checking unclaimed sessions… ' +
+              checked +
+              '/' +
+              total +
+              ' (×' +
+              REPAIR_CONCURRENCY +
+              ')'
+          );
+        }
+      });
+
       if (need.length) {
-        await grantRespondentsAccess(need, level);
-        if (kind === 'structure') report.structureRepaired += need.length;
-        else report.sessionsRepaired += need.length;
+        setRepairProgress(
+          'Making ' + need.length + ' session(s) claimable…'
+        );
+        try {
+          await grantRespondentsAccess(need, 'write');
+          report.sessionsRepaired += need.length;
+        } catch (e2) {
+          report.errors.push('sessions grant: ' + (e2.message || String(e2)));
+        }
       }
     }
 
-    await processTemplate(CONFIG.templates.Poll, 'read', 'structure');
-    await processTemplate(CONFIG.templates.Section, 'read', 'structure');
-    await processTemplate(CONFIG.templates.Question, 'read', 'structure');
-    await processTemplate(CONFIG.templates.Option, 'read', 'structure');
-    await processTemplate(CONFIG.templates.Session, 'write', 'session');
+    await repairStructure('polls', CONFIG.templates.Poll);
+    await repairStructure('sections', CONFIG.templates.Section);
+    await repairStructure('questions', CONFIG.templates.Question);
+    await repairStructure('options', CONFIG.templates.Option);
+    await repairSessions();
+    setRepairProgress(null);
     return report;
   }
 
@@ -3286,10 +3351,15 @@
           'Not checked yet. Re-check or run Create to ensure the group and entity permissions.'
       ) +
       '</p>';
-    if (state.respondentsRepairSummary) {
+    if (state.repairProgress) {
+      html +=
+        '<p class="pa-import-progress" style="margin:0.45rem 0 0" role="status">' +
+        escapeHtml(state.repairProgress) +
+        '</p>';
+    } else if (state.respondentsRepairSummary) {
       var rs = state.respondentsRepairSummary;
       html +=
-        '<p class="pa-muted" style="margin:0.45rem 0 0">Last repair: structure fixed ' +
+        '<p class="pa-muted" style="margin:0.45rem 0 0">Last repair: structure shared ' +
         rs.structureRepaired +
         '/' +
         rs.structureChecked +
@@ -3400,15 +3470,27 @@
       });
     }
 
+    var repairing = !!state.repairProgress;
     html += '<div class="pa-actions">';
-    html += '<button type="button" class="pa-btn" id="pa-cancel-modal">Close</button>';
     html +=
-      '<button type="button" class="pa-btn" id="pa-config-recheck">Re-check</button>';
+      '<button type="button" class="pa-btn" id="pa-cancel-modal"' +
+      (repairing ? ' disabled' : '') +
+      '>Close</button>';
     html +=
-      '<button type="button" class="pa-btn" id="pa-config-repair-acl">Repair Respondents access</button>';
+      '<button type="button" class="pa-btn" id="pa-config-recheck"' +
+      (repairing ? ' disabled' : '') +
+      '>Re-check</button>';
+    html +=
+      '<button type="button" class="pa-btn" id="pa-config-repair-acl"' +
+      (repairing ? ' disabled' : '') +
+      '>' +
+      (repairing ? 'Repairing…' : 'Repair Respondents access') +
+      '</button>';
     if (needsCreate) {
       html +=
-        '<button type="button" class="pa-btn primary" id="pa-config-create">Create / repair configuration</button>';
+        '<button type="button" class="pa-btn primary" id="pa-config-create"' +
+        (repairing ? ' disabled' : '') +
+        '>Create / repair configuration</button>';
     }
     html += '</div></div></div></div>';
     return html;
@@ -3447,6 +3529,10 @@
     var repairBtn = document.getElementById('pa-config-repair-acl');
     if (repairBtn) {
       repairBtn.addEventListener('click', async function () {
+        if (state.repairProgress) return;
+        setBusy(true);
+        state.repairProgress = 'Starting repair…';
+        renderList();
         setBusy(true);
         try {
           await ensureRespondentsGroup({ create: true });
@@ -3454,8 +3540,10 @@
           await buildRespondentsReport();
           buildConfigReports();
           state.modalError = null;
+          state.repairProgress = null;
           renderList();
         } catch (e) {
+          state.repairProgress = null;
           state.modalError = e.message || String(e);
           renderList();
         } finally {
@@ -3592,7 +3680,12 @@
       await ensureTemplates();
       await loadConfigDeps();
       await ensureRespondentsGroup({ create: true });
+      state.modal = 'config';
+      state.repairProgress = 'Starting repair…';
+      renderList();
+      setBusy(true);
       state.respondentsRepairSummary = await repairRespondentsPermissions();
+      state.repairProgress = null;
       buildConfigReports();
       await buildRespondentsReport();
       state.modalError = null;
@@ -3600,6 +3693,7 @@
       state.modal = 'config';
       renderList();
     } catch (e) {
+      state.repairProgress = null;
       state.modalError = e.message || String(e);
       state.modal = 'config';
       renderList();
