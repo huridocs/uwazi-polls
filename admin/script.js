@@ -950,6 +950,15 @@
     return metaLabel(session, 'poll_session_status') || '—';
   }
 
+  /** Admin/hub status cell: progress bar while in progress, pill when accepted. */
+  function sessionStatusCellHtml(session) {
+    var st = sessionStatusLabel(session);
+    if (st === 'accepted') {
+      return '<span class="pa-pill published">accepted</span>';
+    }
+    return sessionProgressCellHtml(session);
+  }
+
   /** Format entity creationDate (ms) or date metadata (unix seconds) for the sessions table. */
   function formatSessionDate(raw) {
     if (raw === undefined || raw === null || raw === '') return '—';
@@ -4653,15 +4662,13 @@
     } else {
       html +=
         '<table class="pa-table pa-sessions-table"><thead><tr>' +
-        '<th>Respondent</th><th>Claimed by</th><th>Status</th><th>Progress</th><th></th>' +
+        '<th>Respondent</th><th>Claimed by</th><th>Status</th><th></th>' +
         '</tr></thead><tbody>';
       state.sessions.forEach(function (s) {
         var token = metaVal(s, 'poll_token') || '';
         var respondent = metaVal(s, 'poll_respondent') || s.title || '—';
         var claimedBy = metaVal(s, 'poll_claimed_by') || '';
         var st = sessionStatusLabel(s);
-        var stCls =
-          st === 'accepted' ? 'published' : st === 'in_progress' ? 'draft' : 'closed';
         html += '<tr>';
         html +=
           '<td><button type="button" class="pa-link pa-edit-session" data-id="' +
@@ -4673,9 +4680,7 @@
           '<td class="pa-muted">' +
           escapeHtml(claimedBy || '—') +
           '</td>';
-        html +=
-          '<td><span class="pa-pill ' + stCls + '">' + escapeHtml(st) + '</span></td>';
-        html += '<td>' + sessionProgressCellHtml(s) + '</td>';
+        html += '<td>' + sessionStatusCellHtml(s) + '</td>';
         html += '<td class="pa-row-actions">';
         if (token) {
           var openHref =

@@ -9,6 +9,7 @@ const {
   deleteEntities,
   createPollSession,
   grantRespondentsAccess,
+  assignSessionToUser,
 } = require('./seed');
 
 /**
@@ -100,9 +101,14 @@ async function createMixedPollFixture(request) {
     /**
      * Attach an in-progress session so the player can open ?poll=&token=.
      */
-    async withSession() {
+    async withSession(opts) {
+      opts = opts || {};
       const { session, token } = await createPollSession(request, poll.sharedId);
       sharedIds.push(session.sharedId);
+      if (opts.assignToUser) {
+        const claimed = await assignSessionToUser(request, session, opts.assignToUser, token);
+        return { session: claimed, token };
+      }
       return { session, token };
     },
     async cleanup() {

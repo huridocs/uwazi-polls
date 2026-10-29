@@ -32,6 +32,7 @@ if (fs.existsSync(pagesLocal) && !process.env.POLL_ADMIN_PATH) {
     const meta = JSON.parse(fs.readFileSync(pagesLocal, 'utf8'));
     if (meta.admin && meta.admin.path) process.env.POLL_ADMIN_PATH = meta.admin.path;
     if (meta.player && meta.player.path) process.env.POLL_PLAYER_PATH = meta.player.path;
+    if (meta.hub && meta.hub.path) process.env.POLL_HUB_PATH = meta.hub.path;
     if (meta.host && !process.env.POLL_BASE_URL) process.env.POLL_BASE_URL = meta.host;
   } catch {
     /* ignore */
