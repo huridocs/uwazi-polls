@@ -19,7 +19,7 @@ function readPageFiles(folder) {
     const acl = fs.readFileSync(path.join(root, 'lib/respondents-acl.js'), 'utf8');
     script = sm + '\n' + acl + '\n' + script;
   }
-  if (dir === 'player') {
+  if (dir === 'player' || dir === 'hub') {
     const acl = fs.readFileSync(path.join(root, 'lib/respondents-acl.js'), 'utf8');
     script = acl + '\n' + script;
   }
@@ -130,11 +130,13 @@ await withSession(async api => {
 
   const admin = await upsert('admin', pagesMeta.admin);
   const player = await upsert('player', pagesMeta.player);
+  const hub = await upsert('hub', pagesMeta.hub);
 
   const local = {
     host: baseURL(),
     admin,
     player,
+    hub,
     updatedAt: new Date().toISOString(),
   };
   fs.writeFileSync(path.join(root, 'pages.local.json'), JSON.stringify(local, null, 2));
@@ -145,6 +147,7 @@ await withSession(async api => {
     `POLL_PASSWORD=${env('POLL_PASSWORD', 'change this password now')}`,
     `POLL_ADMIN_PATH=${admin.path}`,
     `POLL_PLAYER_PATH=${player.path}`,
+    `POLL_HUB_PATH=${hub.path}`,
     '',
   ].join('\n');
   fs.writeFileSync(path.join(root, '.env.ci'), envCi);

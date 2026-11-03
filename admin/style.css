@@ -213,22 +213,17 @@
 
 .pa-table.pa-sessions-table th:nth-child(1),
 .pa-table.pa-sessions-table td:nth-child(1) {
-  width: 28%;
+  width: 32%;
 }
 
 .pa-table.pa-sessions-table th:nth-child(2),
 .pa-table.pa-sessions-table td:nth-child(2) {
-  width: 18%;
+  width: 20%;
 }
 
 .pa-table.pa-sessions-table th:nth-child(3),
 .pa-table.pa-sessions-table td:nth-child(3) {
-  width: 12%;
-}
-
-.pa-table.pa-sessions-table th:nth-child(4),
-.pa-table.pa-sessions-table td:nth-child(4) {
-  width: 16%;
+  width: 22%;
 }
 
 .pa-table.pa-sessions-table .pa-row-actions .pa-btn {

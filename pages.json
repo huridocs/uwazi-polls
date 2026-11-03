@@ -7,5 +7,9 @@
   "player": {
     "files": "player/",
     "title": "Poll player"
+  },
+  "hub": {
+    "files": "hub/",
+    "title": "Poll hub"
   }
 }
