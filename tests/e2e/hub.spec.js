@@ -38,11 +38,12 @@ test.describe('Poll hub', () => {
     const { hubPath, playerPath } = config();
     await page.goto(hubPath);
     await expect(page.locator('#poll-hub #ph-card')).toBeVisible({ timeout: 30_000 });
-    await expect(page.locator('.ph-poll-title')).toContainText(fixture.poll.title, {
-      timeout: 30_000,
-    });
+    const rowTitle = page.locator('.ph-poll-title', { hasText: fixture.poll.title });
+    await expect(rowTitle).toBeVisible({ timeout: 30_000 });
 
-    const open = page.locator('a.ph-btn.primary');
+    const open = page
+      .locator('tr', { has: rowTitle })
+      .locator('a.ph-btn');
     await expect(open).toBeVisible();
     const href = await open.getAttribute('href');
     expect(href).toBeTruthy();

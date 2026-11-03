@@ -281,7 +281,7 @@
       html += '<td class="ph-actions">';
       if (token && pollId) {
         html +=
-          '<a class="ph-btn primary" href="' +
+          '<a class="ph-btn" href="' +
           escapeHtml(playerUrl(pollId, token)) +
           '">Open</a>';
       } else {

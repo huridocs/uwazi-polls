@@ -45,8 +45,11 @@
   var root = document.getElementById('poll-player');
   if (!root) return;
   var titleEl = document.getElementById('pp-title');
+  var topbarEl = document.getElementById('pp-topbar');
+  var hubLinkEl = document.getElementById('pp-hub-link');
   var previewBannerEl = document.getElementById('pp-preview-banner');
   var cardEl = document.getElementById('pp-card') || root;
+  var hubPagePath = '';
 
   var state = {
     pollId: null,
@@ -252,14 +255,54 @@
     }
   }
 
+  function setHubLinkVisible(visible) {
+    if (!hubLinkEl) return;
+    if (visible && hubPagePath) {
+      hubLinkEl.href = hubPagePath;
+      hubLinkEl.hidden = false;
+    } else {
+      hubLinkEl.hidden = true;
+    }
+  }
+
   function setPollTitle(title) {
     if (!titleEl) return;
     if (title) {
       titleEl.hidden = false;
       titleEl.textContent = title;
+      if (topbarEl) topbarEl.hidden = false;
+      setHubLinkVisible(true);
     } else {
       titleEl.hidden = true;
       titleEl.textContent = '';
+      setHubLinkVisible(false);
+      if (topbarEl) topbarEl.hidden = true;
+    }
+  }
+
+  function nameEqPageTitle(a, b) {
+    return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+  }
+
+  function currentLangPrefix() {
+    var m = window.location.pathname.match(/^\/([a-z]{2}(?:-[a-z]+)?)\//i);
+    return m ? '/' + m[1] : '/en';
+  }
+
+  async function resolveHubPage() {
+    try {
+      var pages = await api('GET', '/api/pages');
+      var list = Array.isArray(pages) ? pages : pages && pages.rows ? pages.rows : [];
+      var hub = list.find(function (p) {
+        var t = p.title || (p.locales && p.locales.en && p.locales.en.title);
+        return nameEqPageTitle(t, 'Poll hub');
+      });
+      if (hub && hub.sharedId) {
+        hubPagePath = currentLangPrefix() + '/page/' + hub.sharedId + '/poll-hub';
+        if (titleEl && !titleEl.hidden) setHubLinkVisible(true);
+      }
+    } catch (e) {
+      hubPagePath = '';
     }
   }
 
@@ -1371,6 +1414,7 @@
 
     try {
       await resolveConfigFromInstance();
+      await resolveHubPage();
 
       // Gate on session ACL / claim before loading poll content.
       await loadSessionByToken(state.token);
