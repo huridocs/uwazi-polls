@@ -1,8 +1,9 @@
 /* Poll admin — pages-based; requires logged-in admin/editor.
- * Expects PollSmDetails (lib/sm-details.js) to be loaded first when published via seed:pages.
+ * Expects PollSmDetails + PollDelete (lib/) to be loaded first when published via seed:pages.
  */
 (function () {
   var SM = typeof PollSmDetails !== 'undefined' ? PollSmDetails : null;
+  var PD = typeof PollDelete !== 'undefined' ? PollDelete : null;
   var DOCS_URL =
     'https://github.com/huridocs/uwazi-polls#surveymonkey-import--export';
 
@@ -255,8 +256,19 @@
     sessions: [],
     busy: false,
     error: null,
-    modal: null, // null | 'poll' | 'section' | 'question' | 'session' | 'config' | 'import'
+    modal: null, // null | 'poll' | 'section' | 'question' | 'session' | 'config' | 'import' | 'delete-poll'
     modalError: null,
+    /** @type {null | {
+     *   sharedId: string,
+     *   title: string,
+     *   loading?: boolean,
+     *   plan?: object,
+     *   confirmText?: string,
+     *   running?: boolean,
+     *   progress?: { label: string, done: number, total: number },
+     *   error?: string|null
+     * }} */
+    deletePoll: null,
     editingPoll: null,
     editingSection: null,
     editingQuestion: null,
@@ -287,6 +299,48 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  /** Outline SVGs (Heroicons-style) for compact list actions. */
+  function iconSvg(inner) {
+    return (
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" ' +
+      'stroke="currentColor" stroke-width="1.75" stroke-linecap="round" ' +
+      'stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+      inner +
+      '</svg>'
+    );
+  }
+
+  var LIST_ICONS = {
+    structure: iconSvg(
+      '<path d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z"/>'
+    ),
+    sessions: iconSvg(
+      '<path d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z"/>'
+    ),
+    export: iconSvg(
+      '<path d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/>'
+    ),
+    trash: iconSvg(
+      '<path d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"/>'
+    ),
+  };
+
+  function listIconButton(className, sharedId, label, iconHtml) {
+    return (
+      '<button type="button" class="pa-btn pa-btn-icon ' +
+      className +
+      '" data-id="' +
+      escapeHtml(sharedId) +
+      '" title="' +
+      escapeHtml(label) +
+      '" aria-label="' +
+      escapeHtml(label) +
+      '">' +
+      iconHtml +
+      '</button>'
+    );
   }
 
   function metaList(entity, name) {
@@ -1206,15 +1260,16 @@
           '</td><td><code>' +
           escapeHtml(p.sharedId) +
           '</code></td><td class="pa-row-actions">' +
-          '<button type="button" class="pa-btn pa-structure" data-id="' +
-          escapeHtml(p.sharedId) +
-          '">Structure</button> ' +
-          '<button type="button" class="pa-btn pa-sessions" data-id="' +
-          escapeHtml(p.sharedId) +
-          '">Sessions</button> ' +
-          '<button type="button" class="pa-btn pa-export" data-id="' +
-          escapeHtml(p.sharedId) +
-          '">Export</button></td></tr>';
+          listIconButton('pa-structure', p.sharedId, 'Structure', LIST_ICONS.structure) +
+          listIconButton('pa-sessions', p.sharedId, 'Sessions', LIST_ICONS.sessions) +
+          listIconButton('pa-export', p.sharedId, 'Export', LIST_ICONS.export) +
+          listIconButton(
+            'pa-btn-danger pa-delete-poll',
+            p.sharedId,
+            'Delete',
+            LIST_ICONS.trash
+          ) +
+          '</td></tr>';
       });
       html += '</tbody></table>';
     }
@@ -1305,6 +1360,12 @@
         exportPollAsSmJson(ev.currentTarget.getAttribute('data-id'));
       });
     }
+    var dels = cardEl.querySelectorAll('.pa-delete-poll');
+    for (var d = 0; d < dels.length; d++) {
+      dels[d].addEventListener('click', function (ev) {
+        openDeletePollModal(ev.currentTarget.getAttribute('data-id'));
+      });
+    }
   }
 
   function clearDragMarks() {
@@ -1320,6 +1381,7 @@
     state.editingQuestion = null;
     state.editingSession = null;
     state.optionDraft = [];
+    state.deletePoll = null;
   }
 
   function optionLabelOf(entityOrMeta) {
@@ -1392,6 +1454,7 @@
     if (state.modal === 'session') html += renderSessionModalHtml();
     if (state.modal === 'config') html += renderConfigModalHtml();
     if (state.modal === 'import') html += renderImportModalHtml();
+    if (state.modal === 'delete-poll') html += renderDeletePollModalHtml();
     return html;
   }
 
@@ -1402,6 +1465,7 @@
     if (state.modal === 'session') bindSessionModal();
     if (state.modal === 'config') bindConfigModal();
     if (state.modal === 'import') bindImportModal();
+    if (state.modal === 'delete-poll') bindDeletePollModal();
   }
 
   function modalErrorHtml() {
@@ -1933,6 +1997,263 @@
   async function deleteEntityBySharedId(sharedId) {
     await api('DELETE', '/api/entities?sharedId=' + encodeURIComponent(sharedId));
   }
+
+  async function bulkDeleteSharedIds(ids) {
+    if (!ids || !ids.length) return;
+    await api('POST', '/api/entities/bulkdelete', { sharedIds: ids });
+  }
+
+  function openDeletePollModal(sharedId) {
+    if (!sharedId) return;
+    if (!PD) {
+      state.error =
+        'Delete helpers missing (PollDelete). Re-publish admin via yarn seed:pages.';
+      renderList();
+      return;
+    }
+    var poll = state.polls.find(function (p) {
+      return p.sharedId === sharedId;
+    });
+    state.deletePoll = {
+      sharedId: sharedId,
+      title: (poll && poll.title) || sharedId,
+      loading: true,
+      plan: null,
+      confirmText: '',
+      running: false,
+      progress: null,
+      error: null,
+    };
+    state.modal = 'delete-poll';
+    state.modalError = null;
+    state.error = null;
+    renderList();
+    loadDeletePollPlan(sharedId);
+  }
+
+  async function loadDeletePollPlan(pollSharedId) {
+    try {
+      var sectionsAll = await searchByTemplate(CONFIG.templates.Section);
+      var questionsAll = await searchByTemplate(CONFIG.templates.Question);
+      var sessionsAll = await searchByTemplate(CONFIG.templates.Session);
+      var answersAll = CONFIG.templates.Answer
+        ? await searchByTemplate(CONFIG.templates.Answer)
+        : [];
+
+      var sections = sectionsAll.filter(function (s) {
+        return metaVal(s, 'poll_poll') === pollSharedId;
+      });
+      var questions = questionsAll.filter(function (q) {
+        return metaVal(q, 'poll_poll') === pollSharedId;
+      });
+      var sessions = sessionsAll.filter(function (s) {
+        return metaVal(s, 'poll_poll') === pollSharedId;
+      });
+      var sessionSet = Object.create(null);
+      sessions.forEach(function (s) {
+        if (s && s.sharedId) sessionSet[s.sharedId] = true;
+      });
+      var answers = answersAll.filter(function (a) {
+        return sessionSet[metaVal(a, 'poll_session')];
+      });
+      var answerSet = Object.create(null);
+      answers.forEach(function (a) {
+        if (a && a.sharedId) answerSet[a.sharedId] = true;
+      });
+      var otherQuestions = questionsAll.filter(function (q) {
+        return metaVal(q, 'poll_poll') !== pollSharedId;
+      });
+      var otherAnswers = answersAll.filter(function (a) {
+        return a && a.sharedId && !answerSet[a.sharedId];
+      });
+
+      if (!state.deletePoll || state.deletePoll.sharedId !== pollSharedId) return;
+      state.deletePoll.plan = PD.planPollDeletion({
+        pollSharedId: pollSharedId,
+        sections: sections,
+        questions: questions,
+        sessions: sessions,
+        answers: answers,
+        otherQuestions: otherQuestions,
+        otherAnswers: otherAnswers,
+      });
+      state.deletePoll.loading = false;
+      state.deletePoll.error = null;
+      if (state.modal === 'delete-poll') renderList();
+    } catch (e) {
+      if (!state.deletePoll || state.deletePoll.sharedId !== pollSharedId) return;
+      state.deletePoll.loading = false;
+      state.deletePoll.error = e.message || String(e);
+      if (state.modal === 'delete-poll') renderList();
+    }
+  }
+
+  function renderDeletePollModalHtml() {
+    var d = state.deletePoll || {};
+    var phrase = (PD && PD.CONFIRM_PHRASE) || 'DELETE';
+    var canConfirm =
+      !d.loading &&
+      !d.running &&
+      d.plan &&
+      !d.error &&
+      PD &&
+      PD.isDeleteConfirmed(d.confirmText || '');
+    var html = '';
+    html += '<div class="pa-modal-backdrop" id="pa-modal-backdrop">';
+    html += '<div class="pa-modal" role="dialog" aria-modal="true" aria-labelledby="pa-delete-title">';
+    html += '<h2 id="pa-delete-title">Delete poll</h2>';
+    html += '<div class="pa-form">';
+    html +=
+      '<p class="pa-delete-warning">This permanently deletes <strong>' +
+      escapeHtml(d.title || d.sharedId || '') +
+      '</strong> and related data (answers, sessions, questions, sections, and options not used by other polls). This cannot be undone.</p>';
+
+    if (d.loading) {
+      html += '<p class="pa-muted">Scanning related entities…</p>';
+    } else if (d.error && !d.running) {
+      html += '<p class="pa-error">' + escapeHtml(d.error) + '</p>';
+    } else if (d.plan) {
+      var c = d.plan.counts || {};
+      html += '<ul class="pa-delete-counts">';
+      html += '<li>Answers: <strong>' + Number(c.answers || 0) + '</strong></li>';
+      html += '<li>Sessions: <strong>' + Number(c.sessions || 0) + '</strong></li>';
+      html += '<li>Questions: <strong>' + Number(c.questions || 0) + '</strong></li>';
+      html += '<li>Sections: <strong>' + Number(c.sections || 0) + '</strong></li>';
+      html +=
+        '<li>Unused options: <strong>' +
+        Number(c.options || 0) +
+        '</strong>' +
+        (c.optionsRetained
+          ? ' <span class="pa-muted">(' +
+            Number(c.optionsRetained) +
+            ' shared options kept)</span>'
+          : '') +
+        '</li>';
+      html += '<li>Poll entity: <strong>1</strong></li>';
+      html +=
+        '<li>Total entities: <strong>' + Number(c.total || 0) + '</strong></li>';
+      html += '</ul>';
+    }
+
+    if (d.running || (d.progress && d.progress.total)) {
+      var prog = d.progress || { label: 'Deleting…', done: 0, total: 1 };
+      var pct = prog.total ? Math.min(100, Math.round((100 * prog.done) / prog.total)) : 0;
+      html += '<div class="pa-delete-progress" aria-live="polite">';
+      html +=
+        '<div class="pa-delete-progress-label">' +
+        escapeHtml(prog.label || 'Deleting…') +
+        ' — ' +
+        Number(prog.done || 0) +
+        ' / ' +
+        Number(prog.total || 0) +
+        '</div>';
+      html +=
+        '<div class="pa-delete-progress-track"><div class="pa-delete-progress-fill" style="width:' +
+        pct +
+        '%"></div></div>';
+      html += '</div>';
+    }
+
+    if (!d.running && !d.loading && d.plan && !d.error) {
+      html +=
+        '<div class="pa-field"><label for="pa-delete-confirm">Type <code>' +
+        escapeHtml(phrase) +
+        '</code> to confirm</label><input id="pa-delete-confirm" type="text" autocomplete="off" spellcheck="false" value="' +
+        escapeHtml(d.confirmText || '') +
+        '" /></div>';
+    }
+
+    html += '<div class="pa-actions">';
+    html +=
+      '<button type="button" class="pa-btn" id="pa-cancel-modal"' +
+      (d.running ? ' disabled' : '') +
+      '>Cancel</button>';
+    html +=
+      '<button type="button" class="pa-btn pa-btn-danger" id="pa-confirm-delete-poll"' +
+      (canConfirm ? '' : ' disabled') +
+      '>' +
+      (d.running ? 'Deleting…' : 'Delete forever') +
+      '</button>';
+    html += '</div></div></div></div>';
+    return html;
+  }
+
+  function bindDeletePollModal() {
+    var backdrop = document.getElementById('pa-modal-backdrop');
+    var cancel = document.getElementById('pa-cancel-modal');
+    var confirmBtn = document.getElementById('pa-confirm-delete-poll');
+    var input = document.getElementById('pa-delete-confirm');
+
+    function tryClose() {
+      if (state.deletePoll && state.deletePoll.running) return;
+      closeModal();
+      renderList();
+    }
+
+    if (cancel) cancel.addEventListener('click', tryClose);
+    if (backdrop) {
+      backdrop.addEventListener('click', function (ev) {
+        if (ev.target === backdrop) tryClose();
+      });
+    }
+    if (input) {
+      input.addEventListener('input', function () {
+        if (!state.deletePoll) return;
+        state.deletePoll.confirmText = input.value;
+        if (confirmBtn) {
+          confirmBtn.disabled = !(
+            PD && PD.isDeleteConfirmed(state.deletePoll.confirmText || '')
+          );
+        }
+      });
+      input.focus();
+    }
+    if (confirmBtn) {
+      confirmBtn.addEventListener('click', async function () {
+        await runDeletePollConfirmed();
+      });
+    }
+  }
+
+  async function runDeletePollConfirmed() {
+    if (!PD || !state.deletePoll || !state.deletePoll.plan) return;
+    if (!PD.isDeleteConfirmed(state.deletePoll.confirmText || '')) return;
+    var d = state.deletePoll;
+    d.running = true;
+    d.error = null;
+    d.progress = {
+      label: 'Starting…',
+      done: 0,
+      total: d.plan.counts.total || 1,
+    };
+    renderList();
+    try {
+      await PD.runPollDeletion(d.plan, {
+        chunkSize: 25,
+        deleteSharedIds: bulkDeleteSharedIds,
+        onProgress: function (ev) {
+          if (!state.deletePoll) return;
+          state.deletePoll.progress = {
+            label: ev.label,
+            done: ev.done,
+            total: ev.total,
+          };
+          if (state.modal === 'delete-poll') renderList();
+        },
+      });
+      state.optionsCache = null;
+      closeModal();
+      await loadPolls();
+      state.error = null;
+      renderList();
+    } catch (e) {
+      if (!state.deletePoll) return;
+      state.deletePoll.running = false;
+      state.deletePoll.error = e.message || String(e);
+      renderList();
+    }
+  }
+
 
   async function renumberQuestionsInSection(sectionId) {
     var qs = questionsForSection(sectionId);

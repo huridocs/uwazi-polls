@@ -195,10 +195,34 @@
 
 .pa-row-actions {
   white-space: nowrap;
+  width: 1%;
+  text-align: right;
 }
 
 .pa-row-actions .pa-btn {
   margin: 0.1rem 0.15rem 0.1rem 0;
+}
+
+.pa-row-actions .pa-btn:last-child {
+  margin-right: 0;
+}
+
+/* Compact icon actions for the poll list (mobile-friendly). */
+.pa-btn.pa-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem;
+  min-width: 1.85rem;
+  min-height: 1.85rem;
+  line-height: 0;
+  vertical-align: middle;
+}
+
+.pa-btn.pa-btn-icon svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  display: block;
 }
 
 /* Sessions: keep action buttons on one row in their own column (no overflow into dates). */
@@ -950,10 +974,54 @@
 }
 
 
+.pa-delete-warning {
+  margin: 0 0 0.75rem;
+  color: var(--pa-ink);
+  line-height: 1.45;
+}
+
+.pa-delete-counts {
+  margin: 0 0 0.85rem;
+  padding-left: 1.15rem;
+  color: var(--pa-ink-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+
+.pa-delete-progress {
+  margin: 0 0 0.85rem;
+}
+
+.pa-delete-progress-label {
+  font-size: 0.8125rem;
+  color: var(--pa-ink-muted);
+  margin-bottom: 0.35rem;
+}
+
+.pa-delete-progress-track {
+  height: 0.45rem;
+  border-radius: 999px;
+  background: var(--pa-border-soft, #f0ebe3);
+  overflow: hidden;
+}
+
+.pa-delete-progress-fill {
+  height: 100%;
+  background: var(--pa-danger);
+  border-radius: 999px;
+  transition: width 0.15s ease;
+}
+
 .pa-btn-danger {
   border-color: color-mix(in srgb, var(--pa-danger) 40%, var(--pa-border));
   color: var(--pa-danger);
   background: var(--pa-danger-bg);
+}
+
+.pa-btn-danger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  filter: none;
 }
 
 .pa-btn-danger:hover {

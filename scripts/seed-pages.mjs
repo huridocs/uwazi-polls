@@ -13,10 +13,11 @@ const root = path.join(__dirname, '..');
 function readPageFiles(folder) {
   const dir = folder.replace(/\/$/, '');
   let script = fs.readFileSync(path.join(root, dir, 'script.js'), 'utf8');
-  // Admin import/export helpers live in lib/sm-details.js (also unit-tested).
+  // Admin helpers live in lib/ (also unit-tested) and are concatenated ahead of the page script.
   if (dir === 'admin') {
     const sm = fs.readFileSync(path.join(root, 'lib/sm-details.js'), 'utf8');
-    script = sm + '\n' + script;
+    const del = fs.readFileSync(path.join(root, 'lib/poll-delete.js'), 'utf8');
+    script = sm + '\n' + del + '\n' + script;
   }
   return {
     content: fs.readFileSync(path.join(root, dir, 'content.html'), 'utf8'),
