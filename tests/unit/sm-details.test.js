@@ -134,6 +134,7 @@ describe('PollSmDetails', () => {
               text: 'Pick',
               kind: 'choice',
               allowMultiple: false,
+              required: true,
               choices: [
                 { sharedId: 'o1', text: 'Yes' },
                 { sharedId: 'o2', text: 'No' },
@@ -143,6 +144,7 @@ describe('PollSmDetails', () => {
               sharedId: 'q3',
               text: 'Number',
               kind: 'numeric',
+              required: false,
             },
             {
               sharedId: 'q4',
@@ -164,12 +166,37 @@ describe('PollSmDetails', () => {
     assert.equal(details.pages[0].questions.length, 5);
     assert.equal(details.pages[0].questions[4].family, 'datetime');
     assert.equal(details.pages[0].questions[4].subtype, 'date_only');
+    assert.equal(!!details.pages[0].questions[1].required, true);
+    assert.equal(!!details.pages[0].questions[2].required, false);
+    assert.equal(!!details.pages[0].questions[3].required, true); // default required
 
     const preview = SM.buildImportPreviewFromSmDetails(details);
     const kinds = preview.sections[0].items.map(i => i.kind);
     assert.deepEqual(kinds, ['instructions', 'choice', 'numeric', 'free_text', 'date']);
     assert.equal(preview.sections[0].items[1].choices.length, 2);
+    assert.equal(preview.sections[0].items[1].required, true);
+    assert.equal(preview.sections[0].items[2].required, false);
+    assert.equal(preview.sections[0].items[3].required, true);
     assert.equal(preview.stats.skipped, 0);
     assert.equal(preview.stats.date, 1);
+  });
+
+  it('maps SM required.type into item.required', () => {
+    const required = SM.mapSmQuestion({
+      id: '1',
+      family: 'open_ended',
+      subtype: 'essay',
+      headings: [{ heading: 'Must answer' }],
+      required: { type: 'all', text: 'Required' },
+    });
+    assert.equal(required.required, true);
+
+    const optional = SM.mapSmQuestion({
+      id: '2',
+      family: 'open_ended',
+      subtype: 'essay',
+      headings: [{ heading: 'Optional' }],
+    });
+    assert.equal(optional.required, false);
   });
 });
