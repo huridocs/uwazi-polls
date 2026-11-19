@@ -2,58 +2,68 @@
 /**
  * Create or update Poll admin/player Pages from local files and write pages.local.json + .env.ci
  */
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { withSession, env, baseURL } from './lib/uwazi-api.mjs';
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import { withSession, env, baseURL } from "./lib/uwazi-api.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, "..");
 
 function readPageFiles(folder) {
-  const dir = folder.replace(/\/$/, '');
-  let script = fs.readFileSync(path.join(root, dir, 'script.js'), 'utf8');
+  const dir = folder.replace(/\/$/, "");
+  let script = fs.readFileSync(path.join(root, dir, "script.js"), "utf8");
   // Page helpers live in lib/ (also unit-tested) and are concatenated ahead of the page script.
-  if (dir === 'admin') {
-    const sm = fs.readFileSync(path.join(root, 'lib/sm-details.js'), 'utf8');
-    const del = fs.readFileSync(path.join(root, 'lib/poll-delete.js'), 'utf8');
-    const req = fs.readFileSync(path.join(root, 'lib/poll-required.js'), 'utf8');
-    script = sm + '\n' + del + '\n' + req + '\n' + script;
+  if (dir === "admin") {
+    const sm = fs.readFileSync(path.join(root, "lib/sm-details.js"), "utf8");
+    const del = fs.readFileSync(path.join(root, "lib/poll-delete.js"), "utf8");
+    const req = fs.readFileSync(
+      path.join(root, "lib/poll-required.js"),
+      "utf8",
+    );
+    const exp = fs.readFileSync(path.join(root, "lib/poll-export.js"), "utf8");
+    script = sm + "\n" + del + "\n" + req + "\n" + exp + "\n" + script;
   }
-  if (dir === 'player') {
-    const req = fs.readFileSync(path.join(root, 'lib/poll-required.js'), 'utf8');
-    script = req + '\n' + script;
+  if (dir === "player") {
+    const req = fs.readFileSync(
+      path.join(root, "lib/poll-required.js"),
+      "utf8",
+    );
+    const exp = fs.readFileSync(path.join(root, "lib/poll-export.js"), "utf8");
+    script = req + "\n" + exp + "\n" + script;
   }
   return {
-    content: fs.readFileSync(path.join(root, dir, 'content.html'), 'utf8'),
+    content: fs.readFileSync(path.join(root, dir, "content.html"), "utf8"),
     script,
-    css: fs.readFileSync(path.join(root, dir, 'style.css'), 'utf8'),
+    css: fs.readFileSync(path.join(root, dir, "style.css"), "utf8"),
   };
 }
 
 function slugifyTitle(title) {
   return title
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
-await withSession(async api => {
-  const pagesMeta = JSON.parse(fs.readFileSync(path.join(root, 'pages.json'), 'utf8'));
-  const existing = await api('GET', '/api/pages');
+await withSession(async (api) => {
+  const pagesMeta = JSON.parse(
+    fs.readFileSync(path.join(root, "pages.json"), "utf8"),
+  );
+  const existing = await api("GET", "/api/pages");
   const rows = Array.isArray(existing) ? existing : existing.rows || [];
 
   async function upsert(key, meta) {
     const files = readPageFiles(meta.files);
     const title = meta.title || key;
-    let page = rows.find(p => {
+    let page = rows.find((p) => {
       const t = p.title || (p.locales && p.locales.en && p.locales.en.title);
       return t === title;
     });
 
     if (!page) {
       // Create via editor-shaped payload
-      const created = await api('POST', '/api/pages', {
+      const created = await api("POST", "/api/pages", {
         title,
         metadata: {
           content: files.content,
@@ -64,23 +74,23 @@ await withSession(async api => {
         markdownSupport: false,
       });
       page = created;
-      console.log('created page', title, page.sharedId || page._id);
+      console.log("created page", title, page.sharedId || page._id);
     }
 
     // Prefer editor mode update (locales.draft) used by modern Uwazi
     let sharedId = page.sharedId;
     if (!sharedId && page._id) {
       // reload list
-      const again = await api('GET', '/api/pages');
+      const again = await api("GET", "/api/pages");
       const list = Array.isArray(again) ? again : again.rows || [];
-      const found = list.find(p => (p.title || '') === title);
+      const found = list.find((p) => (p.title || "") === title);
       sharedId = found && found.sharedId;
     }
-    if (!sharedId) throw new Error('no sharedId for page ' + title);
+    if (!sharedId) throw new Error("no sharedId for page " + title);
 
     let ed;
     try {
-      ed = await api('GET', `/api/page?sharedId=${sharedId}&mode=editor`);
+      ed = await api("GET", `/api/page?sharedId=${sharedId}&mode=editor`);
     } catch {
       ed = null;
     }
@@ -93,21 +103,21 @@ await withSession(async api => {
       draft.script = files.script;
       draft.content = files.content;
       locales.en = { title: en.title || title, draft };
-      await api('POST', '/api/pages', {
+      await api("POST", "/api/pages", {
         _id: ed._id,
         sharedId: ed.sharedId,
         entityView: ed.entityView || false,
         markdownSupport: ed.markdownSupport || false,
         locales,
       });
-      const rel = await api('POST', '/api/pages/release', {
+      const rel = await api("POST", "/api/pages/release", {
         sharedId,
-        release_message: 'uwazi-polls seed',
+        release_message: "uwazi-polls seed",
       });
-      console.log('published', title, 'v' + (rel.version || '?'), sharedId);
+      console.log("published", title, "v" + (rel.version || "?"), sharedId);
     } else {
       // Legacy metadata pages
-      await api('POST', '/api/pages', {
+      await api("POST", "/api/pages", {
         _id: page._id,
         sharedId,
         title,
@@ -118,7 +128,7 @@ await withSession(async api => {
         },
         entityView: false,
       });
-      console.log('updated legacy page', title, sharedId);
+      console.log("updated legacy page", title, sharedId);
     }
 
     return {
@@ -129,8 +139,8 @@ await withSession(async api => {
     };
   }
 
-  const admin = await upsert('admin', pagesMeta.admin);
-  const player = await upsert('player', pagesMeta.player);
+  const admin = await upsert("admin", pagesMeta.admin);
+  const player = await upsert("player", pagesMeta.player);
 
   const local = {
     host: baseURL(),
@@ -138,18 +148,21 @@ await withSession(async api => {
     player,
     updatedAt: new Date().toISOString(),
   };
-  fs.writeFileSync(path.join(root, 'pages.local.json'), JSON.stringify(local, null, 2));
+  fs.writeFileSync(
+    path.join(root, "pages.local.json"),
+    JSON.stringify(local, null, 2),
+  );
 
   const envCi = [
     `POLL_BASE_URL=${baseURL()}`,
-    `POLL_USERNAME=${env('POLL_USERNAME', 'admin')}`,
-    `POLL_PASSWORD=${env('POLL_PASSWORD', 'change this password now')}`,
+    `POLL_USERNAME=${env("POLL_USERNAME", "admin")}`,
+    `POLL_PASSWORD=${env("POLL_PASSWORD", "change this password now")}`,
     `POLL_ADMIN_PATH=${admin.path}`,
     `POLL_PLAYER_PATH=${player.path}`,
-    '',
-  ].join('\n');
-  fs.writeFileSync(path.join(root, '.env.ci'), envCi);
+    "",
+  ].join("\n");
+  fs.writeFileSync(path.join(root, ".env.ci"), envCi);
   // Also refresh .env for local convenience if missing admin path placeholders
-  fs.writeFileSync(path.join(root, '.env'), envCi);
-  console.log('wrote pages.local.json and .env / .env.ci');
+  fs.writeFileSync(path.join(root, ".env"), envCi);
+  console.log("wrote pages.local.json and .env / .env.ci");
 });

@@ -1,12 +1,24 @@
 /* Poll player — visual alignment with Uwazi V2 theme tokens. */
 
 .pp {
-  --pp-ink: var(--color-theme-action-primary, var(--color-theme-text-primary, #1a1a1a));
+  --pp-ink: var(
+    --color-theme-action-primary,
+    var(--color-theme-text-primary, #1a1a1a)
+  );
   --pp-ink-secondary: var(--color-theme-text-secondary, #444444);
   --pp-ink-muted: var(--color-theme-text-tertiary, #666666);
-  --pp-paper: var(--color-theme-surface-raised, var(--color-theme-bg-surface, #ffffff));
-  --pp-warm: var(--color-theme-surface-warm, var(--color-theme-bg-warm, #fcfaf8));
-  --pp-vellum: var(--color-theme-surface-muted, var(--color-theme-bg-muted, #f5f3f0));
+  --pp-paper: var(
+    --color-theme-surface-raised,
+    var(--color-theme-bg-surface, #ffffff)
+  );
+  --pp-warm: var(
+    --color-theme-surface-warm,
+    var(--color-theme-bg-warm, #fcfaf8)
+  );
+  --pp-vellum: var(
+    --color-theme-surface-muted,
+    var(--color-theme-bg-muted, #f5f3f0)
+  );
   --pp-parchment: var(
     --color-theme-surface-parchment,
     var(--color-theme-surface-page, var(--color-theme-bg-primary, #f5f3f0))
@@ -197,8 +209,8 @@
   color: var(--pp-ink-secondary);
 }
 
-.pp-field input[type='text'],
-.pp-field input[type='number'],
+.pp-field input[type="text"],
+.pp-field input[type="number"],
 .pp-field textarea {
   width: 100%;
   box-sizing: border-box;
@@ -242,7 +254,10 @@
   border-radius: var(--pp-radius-sm);
   cursor: pointer;
   background: var(--pp-paper);
-  transition: border-color 0.12s ease, background-color 0.12s ease, color 0.12s ease;
+  transition:
+    border-color 0.12s ease,
+    background-color 0.12s ease,
+    color 0.12s ease;
 }
 
 .pp-options label:hover {
@@ -297,7 +312,9 @@
   background: var(--pp-paper);
   color: var(--pp-ink);
   cursor: pointer;
-  transition: background-color 0.12s ease, opacity 0.12s ease;
+  transition:
+    background-color 0.12s ease,
+    opacity 0.12s ease;
 }
 
 .pp-actions button:hover {
@@ -345,10 +362,49 @@
 .pp-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.75rem;
   margin: 0 0 0.65rem;
 }
 
+.pp-toc-export {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+
+.pp-btn-secondary {
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.35rem 0.55rem;
+  border-radius: var(--pp-radius-sm);
+  border: 1px solid var(--pp-border);
+  background: var(--pp-surface, #fff);
+  color: var(--pp-ink);
+  cursor: pointer;
+}
+
+.pp-btn-secondary:hover {
+  background: var(--pp-warm);
+}
+
+.pp-btn-secondary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px var(--pp-ring);
+}
+
+.pp-toc-readonly-note {
+  margin: 0 0 0.75rem;
+}
+
+.pp-done-actions {
+  margin-top: 1.25rem;
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+}
 
 .pp-toc-toggle {
   display: inline-flex;
@@ -530,7 +586,9 @@ button.pp-toc-pill.pp-toc-filter-on {
   background: var(--pp-paper);
   cursor: pointer;
   color: var(--pp-ink);
-  transition: border-color 0.12s ease, background-color 0.12s ease;
+  transition:
+    border-color 0.12s ease,
+    background-color 0.12s ease;
 }
 
 .pp-toc-item:hover {
@@ -594,7 +652,6 @@ button.pp-toc-pill.pp-toc-filter-on {
   outline: 2px solid var(--pp-warning);
   outline-offset: 1px;
 }
-
 
 .pp-link {
   border: 0;
@@ -696,7 +753,6 @@ button.pp-toc-pill.pp-toc-filter-on {
   color: var(--pp-ink);
 }
 
-
 .pp-sorry {
   text-align: center;
   padding: 2.25rem 0.75rem 1.75rem;
@@ -738,7 +794,6 @@ button.pp-toc-pill.pp-toc-filter-on {
   line-height: 1.45;
   color: var(--pp-ink-secondary);
 }
-
 
 .pp-done-message {
   margin: 0 0 1rem;

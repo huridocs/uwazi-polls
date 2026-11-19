@@ -1,55 +1,56 @@
 /* Poll player — ?poll=<sharedId> (defaults to GTI 2026)
- * Expects PollRequired (lib/) when published via seed:pages.
+ * Expects PollRequired + PollExport (lib/) when published via seed:pages.
  */
 (function () {
-  var PR = typeof PollRequired !== 'undefined' ? PollRequired : null;
-  var NS = '[Poll] ';
+  var PR = typeof PollRequired !== "undefined" ? PollRequired : null;
+  var PE = typeof PollExport !== "undefined" ? PollExport : null;
+  var NS = "[Poll] ";
   var CONFIG = {
-    defaultPollId: '',
+    defaultPollId: "",
     templates: {
-      Option: '',
-      Poll: '',
-      Section: '',
-      Question: '',
-      Session: '',
-      Answer: '',
+      Option: "",
+      Poll: "",
+      Section: "",
+      Question: "",
+      Session: "",
+      Answer: "",
     },
     templateNames: {
-      Option: NS + 'Option',
-      Poll: NS + 'Poll',
-      Section: NS + 'Section',
-      Question: NS + 'Question',
-      Session: NS + 'Session',
-      Answer: NS + 'Answer',
+      Option: NS + "Option",
+      Poll: NS + "Poll",
+      Section: NS + "Section",
+      Question: NS + "Question",
+      Session: NS + "Session",
+      Answer: NS + "Answer",
     },
     thesaurusNames: {
-      qType: NS + 'Question type',
-      yesNo: NS + 'Yes No',
-      sessionStatus: NS + 'Session status',
+      qType: NS + "Question type",
+      yesNo: NS + "Yes No",
+      sessionStatus: NS + "Session status",
     },
     qType: {
-      choice: '',
-      free_text: '',
-      numeric: '',
-      date: '',
-      choice_and_text: '',
-      instructions: '',
+      choice: "",
+      free_text: "",
+      numeric: "",
+      date: "",
+      choice_and_text: "",
+      instructions: "",
     },
     yesNo: {
-      yes: '',
-      no: '',
+      yes: "",
+      no: "",
     },
     sessionStatus: {
-      in_progress: '',
-      accepted: '',
+      in_progress: "",
+      accepted: "",
     },
   };
 
-  var root = document.getElementById('poll-player');
+  var root = document.getElementById("poll-player");
   if (!root) return;
-  var titleEl = document.getElementById('pp-title');
-  var previewBannerEl = document.getElementById('pp-preview-banner');
-  var cardEl = document.getElementById('pp-card') || root;
+  var titleEl = document.getElementById("pp-title");
+  var previewBannerEl = document.getElementById("pp-preview-banner");
+  var cardEl = document.getElementById("pp-card") || root;
 
   var state = {
     pollId: null,
@@ -65,15 +66,21 @@
     answersByQuestion: {},
     busy: false,
     done: false,
+    /** After accept: thank-you until respondent opens TOC/review. */
+    reviewMode: false,
     tocOpen: false,
     /** Multi-select TOC filters; empty/all-false = show everything. */
     tocFilters: { answered: false, pending: false, instructions: false },
   };
 
+  function isReadOnly() {
+    return !!(state.preview || state.done);
+  }
+
   function tocItemStatus(q) {
-    if (questionType(q) === 'instructions') return 'instructions';
-    if (state.answersByQuestion[q.sharedId]) return 'answered';
-    return 'pending';
+    if (questionType(q) === "instructions") return "instructions";
+    if (state.answersByQuestion[q.sharedId]) return "answered";
+    return "pending";
   }
 
   function tocFiltersActive() {
@@ -115,16 +122,17 @@
   }
 
   function questionType(q) {
-    var entry = metaEntry(q, 'poll_type');
+    var entry = metaEntry(q, "poll_type");
     if (!entry) return null;
     if (entry.label) {
-      var lab = String(entry.label).toLowerCase().replace(/\s+/g, '_');
-      if (lab === 'instructions') return 'instructions';
-      if (lab === 'choice') return 'choice';
-      if (lab === 'free_text' || lab === 'free text') return 'free_text';
-      if (lab === 'choice_and_text' || lab === 'choice + other field') return 'choice_and_text';
-      if (lab === 'numeric') return 'numeric';
-      if (lab === 'date') return 'date';
+      var lab = String(entry.label).toLowerCase().replace(/\s+/g, "_");
+      if (lab === "instructions") return "instructions";
+      if (lab === "choice") return "choice";
+      if (lab === "free_text" || lab === "free text") return "free_text";
+      if (lab === "choice_and_text" || lab === "choice + other field")
+        return "choice_and_text";
+      if (lab === "numeric") return "numeric";
+      if (lab === "date") return "date";
     }
     for (var k in CONFIG.qType) {
       if (CONFIG.qType[k] === entry.value) return k;
@@ -134,32 +142,32 @@
 
   function isAnswerable(q) {
     var t = questionType(q);
-    return t && t !== 'instructions';
+    return t && t !== "instructions";
   }
 
   function questionIsRequired(q) {
     if (PR) return PR.isQuestionRequired(q, CONFIG.yesNo, questionType);
     if (!isAnswerable(q)) return false;
-    var raw = metaVal(q, 'poll_required');
-    if (raw === undefined || raw === null || raw === '') return true;
+    var raw = metaVal(q, "poll_required");
+    if (raw === undefined || raw === null || raw === "") return true;
     return raw !== CONFIG.yesNo.no;
   }
 
   function allowMultiple(q) {
-    return metaVal(q, 'poll_allow_multiple') === CONFIG.yesNo.yes;
+    return metaVal(q, "poll_allow_multiple") === CONFIG.yesNo.yes;
   }
 
   function api(method, path, body) {
     var opts = {
       method: method,
-      credentials: 'same-origin',
+      credentials: "same-origin",
       headers: {
-        'X-Requested-With': 'XMLHttpRequest',
-        Accept: 'application/json',
+        "X-Requested-With": "XMLHttpRequest",
+        Accept: "application/json",
       },
     };
     if (body !== undefined) {
-      opts.headers['Content-Type'] = 'application/json';
+      opts.headers["Content-Type"] = "application/json";
       opts.body = JSON.stringify(body);
     }
     return fetch(path, opts).then(function (res) {
@@ -174,7 +182,7 @@
           var msg =
             (data && (data.error || data.prettyMessage || data.message)) ||
             res.statusText ||
-            'Request failed';
+            "Request failed";
           throw new Error(msg);
         }
         return data;
@@ -183,7 +191,14 @@
   }
 
   function nameEq(a, b) {
-    return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+    return (
+      String(a || "")
+        .trim()
+        .toLowerCase() ===
+      String(b || "")
+        .trim()
+        .toLowerCase()
+    );
   }
 
   function findByName(rows, name) {
@@ -207,7 +222,7 @@
   }
 
   async function resolveConfigFromInstance() {
-    var tplData = await api('GET', '/api/templates');
+    var tplData = await api("GET", "/api/templates");
     var templates = tplData.rows || [];
     Object.keys(CONFIG.templateNames).forEach(function (key) {
       var found = findByName(templates, CONFIG.templateNames[key]);
@@ -218,15 +233,17 @@
     });
     if (missingTpl.length) {
       throw new Error(
-        'Missing poll templates: ' +
-          missingTpl.map(function (k) {
-            return CONFIG.templateNames[k];
-          }).join(', ') +
-          '. Use Poll admin → Configuration to create them.'
+        "Missing poll templates: " +
+          missingTpl
+            .map(function (k) {
+              return CONFIG.templateNames[k];
+            })
+            .join(", ") +
+          ". Use Poll admin → Configuration to create them.",
       );
     }
 
-    var thData = await api('GET', '/api/thesauris');
+    var thData = await api("GET", "/api/thesauris");
     var thesauri = thData.rows || thData || [];
     function syncValues(thName, target, labels) {
       var th = findByName(thesauri, thName);
@@ -234,23 +251,25 @@
       labels.forEach(function (label) {
         var val = findThesaurusValueByLabel(th, label);
         if (!val || !val.id) {
-          throw new Error('Missing thesaurus value "' + label + '" in "' + thName + '".');
+          throw new Error(
+            'Missing thesaurus value "' + label + '" in "' + thName + '".',
+          );
         }
         target[label] = val.id;
       });
     }
     syncValues(CONFIG.thesaurusNames.qType, CONFIG.qType, [
-      'choice',
-      'free_text',
-      'numeric',
-      'date',
-      'choice_and_text',
-      'instructions',
+      "choice",
+      "free_text",
+      "numeric",
+      "date",
+      "choice_and_text",
+      "instructions",
     ]);
-    syncValues(CONFIG.thesaurusNames.yesNo, CONFIG.yesNo, ['yes', 'no']);
+    syncValues(CONFIG.thesaurusNames.yesNo, CONFIG.yesNo, ["yes", "no"]);
     syncValues(CONFIG.thesaurusNames.sessionStatus, CONFIG.sessionStatus, [
-      'in_progress',
-      'accepted',
+      "in_progress",
+      "accepted",
     ]);
   }
 
@@ -270,14 +289,14 @@
       titleEl.textContent = title;
     } else {
       titleEl.hidden = true;
-      titleEl.textContent = '';
+      titleEl.textContent = "";
     }
   }
 
   function setPreviewBanner(visible) {
     if (!previewBannerEl) return;
     previewBannerEl.hidden = !visible;
-    root.classList.toggle('pp-is-preview', !!visible);
+    root.classList.toggle("pp-is-preview", !!visible);
   }
 
   function renderShell(html) {
@@ -286,16 +305,16 @@
 
   function setBusy(busy) {
     state.busy = busy;
-    var buttons = root.querySelectorAll('button');
+    var buttons = root.querySelectorAll("button");
     for (var i = 0; i < buttons.length; i++) buttons[i].disabled = busy;
   }
 
   function escapeHtml(s) {
     return String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   }
 
   function currentItem() {
@@ -303,9 +322,15 @@
   }
 
   function shortQuestionLabel(q) {
-    var text = metaVal(q, 'poll_question_text') || q.title || '';
-    var line = String(text).split('\n').map(function (s) { return s.trim(); }).filter(Boolean)[0] || 'Item';
-    return line.length > 72 ? line.slice(0, 69) + '…' : line;
+    var text = metaVal(q, "poll_question_text") || q.title || "";
+    var line =
+      String(text)
+        .split("\n")
+        .map(function (s) {
+          return s.trim();
+        })
+        .filter(Boolean)[0] || "Item";
+    return line.length > 72 ? line.slice(0, 69) + "…" : line;
   }
 
   function sectionStats(sectionSharedId) {
@@ -331,8 +356,201 @@
     return { total: total, answered: answered };
   }
 
+  function sessionStatusKey() {
+    var id = metaVal(state.session, "poll_session_status");
+    if (id === CONFIG.sessionStatus.accepted) return "accepted";
+    if (id === CONFIG.sessionStatus.in_progress) return "in_progress";
+    return id ? String(id) : "";
+  }
+
+  function answerToExportPayload(q, answerEntity) {
+    if (!answerEntity) return null;
+    var type = questionType(q);
+    if (!type || type === "instructions") return null;
+    var payload = {};
+    if (type === "choice" || type === "choice_and_text") {
+      var avail = Object.create(null);
+      metaList(q, "poll_available_options").forEach(function (o) {
+        if (o && o.value !== undefined) {
+          avail[o.value] = o.label || String(o.value);
+        }
+      });
+      payload.selectedLabels = metaList(answerEntity, "poll_selected_options")
+        .map(function (o) {
+          if (!o) return "";
+          if (o.label) return String(o.label);
+          return avail[o.value] || String(o.value || "");
+        })
+        .filter(Boolean);
+      if (type === "choice_and_text") {
+        payload.text = metaVal(answerEntity, "poll_text") || "";
+      }
+      if (!payload.selectedLabels.length && !payload.text) return null;
+      return payload;
+    }
+    if (type === "free_text") {
+      var text = metaVal(answerEntity, "poll_text");
+      if (text === undefined || text === null || text === "") return null;
+      return { text: String(text) };
+    }
+    if (type === "numeric") {
+      var num = metaVal(answerEntity, "poll_numeric");
+      if (num === undefined || num === null || num === "") return null;
+      return { numeric: num };
+    }
+    if (type === "date") {
+      var date = metaVal(answerEntity, "poll_date");
+      if (date === undefined || date === null || date === "") return null;
+      return { date: date };
+    }
+    return null;
+  }
+
+  function buildExportSnapshot() {
+    var sess = state.session || {};
+    return {
+      poll: {
+        title: (state.poll && state.poll.title) || "",
+        sharedId: state.pollId || (state.poll && state.poll.sharedId) || "",
+      },
+      session: {
+        sharedId: sess.sharedId || "",
+        respondent:
+          metaVal(sess, "poll_respondent") ||
+          (state.user && state.user.username) ||
+          sess.title ||
+          "",
+        status: sessionStatusKey(),
+        token: metaVal(sess, "poll_token") || state.token || "",
+      },
+      items: (state.items || []).map(function (item) {
+        var q = item.question;
+        var sec = item.section;
+        var type = questionType(q);
+        return {
+          sectionNumber: metaVal(sec, "poll_number"),
+          sectionTitle: (sec && sec.title) || "",
+          questionSharedId: q.sharedId,
+          questionNumber: metaVal(q, "poll_number"),
+          questionText: metaVal(q, "poll_question_text") || q.title || "",
+          questionType: type,
+          required: questionIsRequired(q),
+          answer: answerToExportPayload(q, state.answersByQuestion[q.sharedId]),
+        };
+      }),
+    };
+  }
+
+  function requireExport() {
+    if (!PE) {
+      throw new Error(
+        "Export helpers missing (PollExport). Re-publish player via yarn seed:pages.",
+      );
+    }
+    return PE;
+  }
+
+  function downloadTextFile(filename, text, mime) {
+    var blob = new Blob([text], { type: mime || "text/plain;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () {
+      URL.revokeObjectURL(url);
+    }, 1000);
+  }
+
+  function safeExportBasename() {
+    var poll = String((state.poll && state.poll.title) || "poll")
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 40);
+    var who = String(
+      metaVal(state.session, "poll_respondent") ||
+        (state.session && state.session.title) ||
+        "session",
+    )
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 30);
+    return (poll || "poll") + "-" + (who || "session");
+  }
+
+  function exportSessionCsv() {
+    var exportApi = requireExport();
+    var csv = exportApi.buildLongCsv(buildExportSnapshot());
+    downloadTextFile(
+      safeExportBasename() + "-answers.csv",
+      csv,
+      "text/csv;charset=utf-8",
+    );
+  }
+
+  function exportSessionPrint() {
+    var exportApi = requireExport();
+    var html = exportApi.buildPrintHtml(buildExportSnapshot());
+    var w = window.open("", "_blank");
+    if (!w) {
+      window.alert("Pop-up blocked. Allow pop-ups to print or save as PDF.");
+      return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(function () {
+      try {
+        w.print();
+      } catch (e) {
+        /* ignore */
+      }
+    }, 300);
+  }
+
+  function tocExportButtonsHtml() {
+    return (
+      '<div class="pp-toc-export">' +
+      '<button type="button" class="pp-btn-secondary" id="pp-export-print">Print</button>' +
+      '<button type="button" class="pp-btn-secondary" id="pp-export-csv">Download CSV</button>' +
+      "</div>"
+    );
+  }
+
+  function bindTocExportButtons() {
+    var printBtn = document.getElementById("pp-export-print");
+    if (printBtn) {
+      printBtn.addEventListener("click", function () {
+        try {
+          exportSessionPrint();
+        } catch (e) {
+          window.alert(e.message || String(e));
+        }
+      });
+    }
+    var csvBtn = document.getElementById("pp-export-csv");
+    if (csvBtn) {
+      csvBtn.addEventListener("click", function () {
+        try {
+          exportSessionCsv();
+        } catch (e) {
+          window.alert(e.message || String(e));
+        }
+      });
+    }
+  }
+
+  function enterReviewMode() {
+    state.reviewMode = true;
+    state.tocOpen = true;
+    renderView();
+  }
+
   function tocToggleButton() {
-    var label = state.tocOpen ? 'Back to question' : 'Contents';
+    var label = state.tocOpen ? "Back to question" : "Contents";
     var icon = state.tocOpen
       ? '<svg class="pp-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>'
       : '<svg class="pp-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>';
@@ -343,9 +561,9 @@
       label +
       '">' +
       icon +
-      '<span>' +
+      "<span>" +
       label +
-      '</span></button>'
+      "</span></button>"
     );
   }
 
@@ -353,7 +571,7 @@
     var out = [];
     state.items.forEach(function (item) {
       if (item.section.sharedId !== sectionSharedId) return;
-      if (questionType(item.question) !== 'instructions') return;
+      if (questionType(item.question) !== "instructions") return;
       out.push(item.question);
     });
     return out;
@@ -362,14 +580,14 @@
   function sectionGuidanceLinkHtml() {
     return (
       '<button type="button" class="pp-link pp-guidance-corner" id="pp-section-guidance">' +
-      'Section instructions</button>'
+      "Section instructions</button>"
     );
   }
 
   function closeGuidanceModal() {
-    var el = document.getElementById('pp-guidance-backdrop');
+    var el = document.getElementById("pp-guidance-backdrop");
     if (el && el.parentNode) el.parentNode.removeChild(el);
-    root.classList.remove('pp-has-modal');
+    root.classList.remove("pp-has-modal");
   }
 
   function openGuidanceModal() {
@@ -379,63 +597,65 @@
     var section = item.section;
     var guidance = sectionGuidanceItems(section.sharedId);
     var title =
-      'Section ' +
-      (metaVal(section, 'poll_number') || '') +
-      ' — ' +
-      (section.title || 'Instructions');
-    var html = '';
-    html += '<div class="pp-guidance-backdrop" id="pp-guidance-backdrop" role="presentation">';
+      "Section " +
+      (metaVal(section, "poll_number") || "") +
+      " — " +
+      (section.title || "Instructions");
+    var html = "";
+    html +=
+      '<div class="pp-guidance-backdrop" id="pp-guidance-backdrop" role="presentation">';
     html +=
       '<div class="pp-guidance-modal" role="dialog" aria-modal="true" aria-labelledby="pp-guidance-title">';
     html += '<div class="pp-guidance-modal-head">';
-    html += '<h2 id="pp-guidance-title">' + escapeHtml(title) + '</h2>';
+    html += '<h2 id="pp-guidance-title">' + escapeHtml(title) + "</h2>";
     html +=
       '<button type="button" class="pp-btn" id="pp-guidance-close" aria-label="Close">Close</button>';
-    html += '</div>';
+    html += "</div>";
     html += '<div class="pp-guidance-modal-body">';
     if (!guidance.length) {
       html += '<p class="pp-muted">No instructions for this section.</p>';
     } else {
       guidance.forEach(function (q) {
-        var qText = metaVal(q, 'poll_question_text') || q.title || '';
+        var qText = metaVal(q, "poll_question_text") || q.title || "";
         html +=
           '<div class="pp-instructions"><div class="pp-qtext">' +
           escapeHtml(qText) +
-          '</div></div>';
+          "</div></div>";
       });
     }
-    html += '</div></div></div>';
+    html += "</div></div></div>";
 
-    var wrap = document.createElement('div');
+    var wrap = document.createElement("div");
     wrap.innerHTML = html;
     var backdrop = wrap.firstChild;
-    root.classList.add('pp-has-modal');
+    root.classList.add("pp-has-modal");
     root.appendChild(backdrop);
 
     function close() {
       closeGuidanceModal();
     }
-    document.getElementById('pp-guidance-close').addEventListener('click', close);
-    backdrop.addEventListener('click', function (ev) {
+    document
+      .getElementById("pp-guidance-close")
+      .addEventListener("click", close);
+    backdrop.addEventListener("click", function (ev) {
       if (ev.target === backdrop) close();
     });
   }
 
   function bindGuidanceLink() {
-    var btn = document.getElementById('pp-section-guidance');
+    var btn = document.getElementById("pp-section-guidance");
     if (!btn) return;
-    btn.addEventListener('click', function () {
+    btn.addEventListener("click", function () {
       openGuidanceModal();
     });
   }
 
-
   function closeAppModal() {
-    var el = document.getElementById('pp-app-modal-backdrop');
+    var el = document.getElementById("pp-app-modal-backdrop");
     if (el && el.parentNode) el.parentNode.removeChild(el);
     // Keep has-modal if guidance still open
-    if (!document.getElementById('pp-guidance-backdrop')) {
-      root.classList.remove('pp-has-modal');
+    if (!document.getElementById("pp-guidance-backdrop")) {
+      root.classList.remove("pp-has-modal");
     }
   }
 
@@ -446,31 +666,38 @@
   function openConfirmModal(opts) {
     closeAppModal();
     return new Promise(function (resolve) {
-      var html = '';
-      html += '<div class="pp-guidance-backdrop" id="pp-app-modal-backdrop" role="presentation">';
+      var html = "";
+      html +=
+        '<div class="pp-guidance-backdrop" id="pp-app-modal-backdrop" role="presentation">';
       html +=
         '<div class="pp-guidance-modal pp-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="pp-confirm-title">';
       html += '<div class="pp-guidance-modal-head">';
-      html += '<h2 id="pp-confirm-title">' + escapeHtml(opts.title || 'Confirm') + '</h2>';
-      html += '</div>';
+      html +=
+        '<h2 id="pp-confirm-title">' +
+        escapeHtml(opts.title || "Confirm") +
+        "</h2>";
+      html += "</div>";
       html += '<div class="pp-guidance-modal-body">';
-      html += '<p class="pp-confirm-message">' + escapeHtml(opts.message || '') + '</p>';
-      html += '</div>';
+      html +=
+        '<p class="pp-confirm-message">' +
+        escapeHtml(opts.message || "") +
+        "</p>";
+      html += "</div>";
       html += '<div class="pp-confirm-actions">';
       html +=
         '<button type="button" class="pp-btn" id="pp-confirm-cancel">' +
-        escapeHtml(opts.cancelLabel || 'Cancel') +
-        '</button>';
+        escapeHtml(opts.cancelLabel || "Cancel") +
+        "</button>";
       html +=
         '<button type="button" class="pp-btn pp-btn-primary" id="pp-confirm-ok">' +
-        escapeHtml(opts.confirmLabel || 'Confirm') +
-        '</button>';
-      html += '</div></div></div>';
+        escapeHtml(opts.confirmLabel || "Confirm") +
+        "</button>";
+      html += "</div></div></div>";
 
-      var wrap = document.createElement('div');
+      var wrap = document.createElement("div");
       wrap.innerHTML = html;
       var backdrop = wrap.firstChild;
-      root.classList.add('pp-has-modal');
+      root.classList.add("pp-has-modal");
       root.appendChild(backdrop);
 
       var settled = false;
@@ -480,13 +707,17 @@
         closeAppModal();
         resolve(val);
       }
-      document.getElementById('pp-confirm-cancel').addEventListener('click', function () {
-        finish(false);
-      });
-      document.getElementById('pp-confirm-ok').addEventListener('click', function () {
-        finish(true);
-      });
-      backdrop.addEventListener('click', function (ev) {
+      document
+        .getElementById("pp-confirm-cancel")
+        .addEventListener("click", function () {
+          finish(false);
+        });
+      document
+        .getElementById("pp-confirm-ok")
+        .addEventListener("click", function () {
+          finish(true);
+        });
+      backdrop.addEventListener("click", function (ev) {
         if (ev.target === backdrop) finish(false);
       });
     });
@@ -495,10 +726,12 @@
   function progressHtml() {
     var item = currentItem();
     var section = item.section;
-    var secNum = metaVal(section, 'poll_number') || '?';
+    var secNum = metaVal(section, "poll_number") || "?";
     var secTotal = Object.keys(state.sectionsById).length;
     var stats = overallAnswerStats();
-    var pct = stats.total ? Math.round((stats.answered / stats.total) * 100) : 0;
+    var pct = stats.total
+      ? Math.round((stats.answered / stats.total) * 100)
+      : 0;
     return (
       '<div class="pp-toolbar">' +
       tocToggleButton() +
@@ -506,62 +739,76 @@
       '<div class="pp-bar"><span style="width:' +
       pct +
       '%"></span></div>' +
-      '<span>Section ' +
+      "<span>Section " +
       secNum +
-      '/' +
+      "/" +
       secTotal +
-      ' · ' +
+      " · " +
       stats.answered +
-      '/' +
+      "/" +
       stats.total +
-      ' answered</span>' +
-      '</div></div>'
+      " answered</span>" +
+      "</div></div>"
     );
   }
 
   function orderedSections() {
     return Object.keys(state.sectionsById)
-      .map(function (id) { return state.sectionsById[id]; })
+      .map(function (id) {
+        return state.sectionsById[id];
+      })
       .sort(function (a, b) {
-        return (metaVal(a, 'poll_number') || 0) - (metaVal(b, 'poll_number') || 0);
+        return (
+          (metaVal(a, "poll_number") || 0) - (metaVal(b, "poll_number") || 0)
+        );
       });
   }
 
   function renderToc() {
     var statsAll = overallAnswerStats();
-    var html = '';
-    html += '<div class="pp-toolbar">' + tocToggleButton() + '</div>';
+    var html = "";
+    html +=
+      '<div class="pp-toolbar">' +
+      tocToggleButton() +
+      tocExportButtonsHtml() +
+      "</div>";
     html += '<h2 class="pp-toc-heading">Contents &amp; progress</h2>';
+    if (state.done) {
+      html +=
+        '<p class="pp-muted pp-toc-readonly-note">Session accepted — answers are read-only. Print or download CSV anytime.</p>';
+    }
     html +=
       '<p class="pp-muted pp-toc-summary">' +
       statsAll.answered +
-      ' of ' +
+      " of " +
       statsAll.total +
-      ' answerable questions completed (' +
-      (statsAll.total ? Math.round((statsAll.answered / statsAll.total) * 100) : 0) +
-      '%)</p>';
+      " answerable questions completed (" +
+      (statsAll.total
+        ? Math.round((statsAll.answered / statsAll.total) * 100)
+        : 0) +
+      "%)</p>";
     function filterPill(key, cls, label) {
       var on = state.tocFilters[key];
       return (
         '<button type="button" class="pp-toc-pill ' +
         cls +
-        (on ? ' pp-toc-filter-on' : '') +
+        (on ? " pp-toc-filter-on" : "") +
         '" data-toc-filter="' +
         key +
         '" aria-pressed="' +
-        (on ? 'true' : 'false') +
+        (on ? "true" : "false") +
         '" title="Toggle filter">' +
         label +
-        '</button>'
+        "</button>"
       );
     }
     html +=
       '<p class="pp-toc-legend">' +
-      filterPill('answered', 'pp-toc-answered', 'Answered') +
-      filterPill('pending', 'pp-toc-pending', 'Not answered') +
-      filterPill('instructions', 'pp-toc-instructions', 'Instructions') +
+      filterPill("answered", "pp-toc-answered", "Answered") +
+      filterPill("pending", "pp-toc-pending", "Not answered") +
+      filterPill("instructions", "pp-toc-instructions", "Instructions") +
       '<span class="pp-toc-pill pp-toc-current-mark" title="Highlight only — not a filter">Current</span>' +
-      '</p>';
+      "</p>";
     if (tocFiltersActive()) {
       html +=
         '<p class="pp-muted pp-toc-filter-hint">Showing filtered items — click pills again to adjust (none selected = all).</p>';
@@ -570,7 +817,7 @@
     orderedSections().forEach(function (section) {
       var st = sectionStats(section.sharedId);
       var pct = st.total ? Math.round((st.answered / st.total) * 100) : 0;
-      var sectionItemsHtml = '';
+      var sectionItemsHtml = "";
       var visibleCount = 0;
       state.items.forEach(function (item, idx) {
         if (item.section.sharedId !== section.sharedId) return;
@@ -580,16 +827,16 @@
         visibleCount += 1;
         var type = questionType(q);
         var current = idx === state.index;
-        var cls = 'pp-toc-item';
-        if (status === 'instructions') cls += ' pp-toc-instructions';
-        else if (status === 'answered') cls += ' pp-toc-answered';
-        else cls += ' pp-toc-pending';
-        if (current) cls += ' pp-toc-current';
+        var cls = "pp-toc-item";
+        if (status === "instructions") cls += " pp-toc-instructions";
+        else if (status === "answered") cls += " pp-toc-answered";
+        else cls += " pp-toc-pending";
+        if (current) cls += " pp-toc-current";
         var required = questionIsRequired(q);
-        if (required) cls += ' pp-toc-required';
-        if (required && status === 'pending') cls += ' pp-toc-required-missing';
-        var num = metaVal(q, 'poll_number') || '';
-        var prefix = type === 'instructions' ? 'Info' : 'Q' + num;
+        if (required) cls += " pp-toc-required";
+        if (required && status === "pending") cls += " pp-toc-required-missing";
+        var num = metaVal(q, "poll_number") || "";
+        var prefix = type === "instructions" ? "Info" : "Q" + num;
         sectionItemsHtml +=
           '<li class="pp-toc-item-wrap"><button type="button" class="' +
           cls +
@@ -599,11 +846,11 @@
           escapeHtml(prefix) +
           '</span><span class="pp-toc-label">' +
           escapeHtml(shortQuestionLabel(q)) +
-          '</span>' +
+          "</span>" +
           (required
             ? '<span class="pp-toc-req" title="Required question">*</span>'
-            : '') +
-          '</button></li>';
+            : "") +
+          "</button></li>";
       });
       if (!visibleCount) return;
       html += '<section class="pp-toc-section">';
@@ -612,18 +859,23 @@
         '<button type="button" class="pp-toc-section-link" data-section="' +
         escapeHtml(section.sharedId) +
         '">' +
-        escapeHtml('Section ' + (metaVal(section, 'poll_number') || '') + ' — ' + section.title) +
-        '</button>' +
+        escapeHtml(
+          "Section " +
+            (metaVal(section, "poll_number") || "") +
+            " — " +
+            section.title,
+        ) +
+        "</button>" +
         '<span class="pp-toc-section-stats">' +
         st.answered +
-        '/' +
+        "/" +
         st.total +
-        '</span></div>';
+        "</span></div>";
       html +=
         '<div class="pp-toc-section-bar"><span style="width:' +
         pct +
         '%"></span></div>';
-      html += '<ul class="pp-toc-list">' + sectionItemsHtml + '</ul></section>';
+      html += '<ul class="pp-toc-list">' + sectionItemsHtml + "</ul></section>";
     });
 
     renderShell(html);
@@ -632,45 +884,56 @@
 
   function bindTocChrome() {
     bindGuidanceLink();
-    var toggle = document.getElementById('pp-toc-toggle');
+    bindTocExportButtons();
+    var toggle = document.getElementById("pp-toc-toggle");
     if (toggle) {
-      toggle.addEventListener('click', function () {
+      toggle.addEventListener("click", function () {
         closeGuidanceModal();
         state.tocOpen = !state.tocOpen;
-        if (state.tocOpen) renderToc();
-        else renderQuestion();
+        if (state.tocOpen) {
+          if (state.done) state.reviewMode = true;
+          renderToc();
+        } else {
+          renderQuestion();
+        }
       });
     }
-    var filterBtns = cardEl.querySelectorAll('[data-toc-filter]');
+    var filterBtns = cardEl.querySelectorAll("[data-toc-filter]");
     for (var f = 0; f < filterBtns.length; f++) {
-      filterBtns[f].addEventListener('click', function (ev) {
-        var key = ev.currentTarget.getAttribute('data-toc-filter');
-        if (!key || !Object.prototype.hasOwnProperty.call(state.tocFilters, key)) return;
+      filterBtns[f].addEventListener("click", function (ev) {
+        var key = ev.currentTarget.getAttribute("data-toc-filter");
+        if (
+          !key ||
+          !Object.prototype.hasOwnProperty.call(state.tocFilters, key)
+        )
+          return;
         state.tocFilters[key] = !state.tocFilters[key];
         renderToc();
       });
     }
-    var sectionLinks = cardEl.querySelectorAll('.pp-toc-section-link');
+    var sectionLinks = cardEl.querySelectorAll(".pp-toc-section-link");
     for (var i = 0; i < sectionLinks.length; i++) {
-      sectionLinks[i].addEventListener('click', function (ev) {
-        var sid = ev.currentTarget.getAttribute('data-section');
+      sectionLinks[i].addEventListener("click", function (ev) {
+        var sid = ev.currentTarget.getAttribute("data-section");
         for (var j = 0; j < state.items.length; j++) {
           if (state.items[j].section.sharedId === sid) {
             state.index = j;
             state.tocOpen = false;
+            if (state.done) state.reviewMode = true;
             renderQuestion();
             return;
           }
         }
       });
     }
-    var items = cardEl.querySelectorAll('.pp-toc-item');
+    var items = cardEl.querySelectorAll(".pp-toc-item");
     for (var k = 0; k < items.length; k++) {
-      items[k].addEventListener('click', function (ev) {
-        var idx = Number(ev.currentTarget.getAttribute('data-index'));
+      items[k].addEventListener("click", function (ev) {
+        var idx = Number(ev.currentTarget.getAttribute("data-index"));
         if (!Number.isNaN(idx)) {
           state.index = idx;
           state.tocOpen = false;
+          if (state.done) state.reviewMode = true;
           renderQuestion();
         }
       });
@@ -683,17 +946,17 @@
   }
 
   function optionInputs(q, existing) {
-    var opts = metaList(q, 'poll_available_options');
+    var opts = metaList(q, "poll_available_options");
     var multi = allowMultiple(q);
     var selected = {};
-    metaList(existing, 'poll_selected_options').forEach(function (o) {
+    metaList(existing, "poll_selected_options").forEach(function (o) {
       if (o && o.value !== undefined) selected[o.value] = true;
     });
     var html = '<ul class="pp-options">';
     opts.forEach(function (o, idx) {
-      var id = 'pp-opt-' + idx;
-      var inputType = multi ? 'checkbox' : 'radio';
-      var checked = selected[o.value] ? ' checked' : '';
+      var id = "pp-opt-" + idx;
+      var inputType = multi ? "checkbox" : "radio";
+      var checked = selected[o.value] ? " checked" : "";
       html +=
         '<li><label for="' +
         id +
@@ -705,33 +968,33 @@
         o.value +
         '"' +
         checked +
-        ' /><span>' +
+        " /><span>" +
         escapeHtml(o.label || o.value) +
-        '</span></label></li>';
+        "</span></label></li>";
     });
-    html += '</ul>';
+    html += "</ul>";
     return html;
   }
 
   /** Uwazi date metadata ↔ <input type="date"> (YYYY-MM-DD), stored as UTC midnight unix seconds. */
   function dateToInputValue(raw) {
-    if (raw === undefined || raw === null || raw === '') return '';
-    var n = typeof raw === 'number' ? raw : Number(raw);
-    if (!Number.isFinite(n)) return '';
+    if (raw === undefined || raw === null || raw === "") return "";
+    var n = typeof raw === "number" ? raw : Number(raw);
+    if (!Number.isFinite(n)) return "";
     if (n < 1e12) n = n * 1000;
     var d = new Date(n);
-    if (Number.isNaN(d.getTime())) return '';
+    if (Number.isNaN(d.getTime())) return "";
     var y = d.getUTCFullYear();
     var m = String(d.getUTCMonth() + 1);
-    if (m.length < 2) m = '0' + m;
+    if (m.length < 2) m = "0" + m;
     var day = String(d.getUTCDate());
-    if (day.length < 2) day = '0' + day;
-    return y + '-' + m + '-' + day;
+    if (day.length < 2) day = "0" + day;
+    return y + "-" + m + "-" + day;
   }
 
   function inputValueToUnixSeconds(yyyyMmDd) {
     if (!yyyyMmDd) return null;
-    var parts = String(yyyyMmDd).split('-');
+    var parts = String(yyyyMmDd).split("-");
     if (parts.length !== 3) return null;
     var y = Number(parts[0]);
     var mo = Number(parts[1]);
@@ -742,21 +1005,22 @@
 
   function readForm(q) {
     var type = questionType(q);
-    var result = { options: [], text: '', numeric: null, date: null };
-    if (type === 'choice' || type === 'choice_and_text') {
+    var result = { options: [], text: "", numeric: null, date: null };
+    if (type === "choice" || type === "choice_and_text") {
       var inputs = root.querySelectorAll('input[name="pp-option"]:checked');
-      for (var i = 0; i < inputs.length; i++) result.options.push(inputs[i].value);
+      for (var i = 0; i < inputs.length; i++)
+        result.options.push(inputs[i].value);
     }
-    if (type === 'free_text' || type === 'choice_and_text') {
-      var ta = root.querySelector('#pp-text');
-      result.text = ta ? ta.value.trim() : '';
+    if (type === "free_text" || type === "choice_and_text") {
+      var ta = root.querySelector("#pp-text");
+      result.text = ta ? ta.value.trim() : "";
     }
-    if (type === 'numeric') {
-      var num = root.querySelector('#pp-numeric');
-      result.numeric = num && num.value !== '' ? Number(num.value) : null;
+    if (type === "numeric") {
+      var num = root.querySelector("#pp-numeric");
+      result.numeric = num && num.value !== "" ? Number(num.value) : null;
     }
-    if (type === 'date') {
-      var dateEl = root.querySelector('#pp-date');
+    if (type === "date") {
+      var dateEl = root.querySelector("#pp-date");
       result.date = dateEl ? inputValueToUnixSeconds(dateEl.value) : null;
     }
     return result;
@@ -764,31 +1028,43 @@
 
   function validate(q, form) {
     var type = questionType(q);
-    if (type === 'instructions') return null;
-    if (type === 'choice' || type === 'choice_and_text') {
-      if (!form.options.length) return 'Please select an option.';
+    if (type === "instructions") return null;
+    if (type === "choice" || type === "choice_and_text") {
+      if (!form.options.length) return "Please select an option.";
     }
-    if (type === 'free_text' && !form.text) return 'Please enter an answer.';
-    if (type === 'numeric' && (form.numeric === null || Number.isNaN(form.numeric))) {
-      return 'Please enter a number.';
+    if (type === "free_text" && !form.text) return "Please enter an answer.";
+    if (
+      type === "numeric" &&
+      (form.numeric === null || Number.isNaN(form.numeric))
+    ) {
+      return "Please enter a number.";
     }
-    if (type === 'date' && (form.date === null || form.date === undefined)) {
-      return 'Please select a date.';
+    if (type === "date" && (form.date === null || form.date === undefined)) {
+      return "Please select a date.";
     }
     return null;
   }
 
   function renderQuestion() {
-    if (state.done && !state.preview) {
+    if (state.done && !state.preview && !state.reviewMode) {
       renderShell(
         '<div class="pp-done">' +
-          '<h2>Thank you</h2>' +
+          "<h2>Thank you</h2>" +
           '<p class="pp-done-message">Your answers for <strong>' +
           escapeHtml(state.poll.title) +
-          '</strong> have been accepted.</p>' +
-          '<p class="pp-done-hint">If you need to revisit or change your answers later, contact an administrator.</p>' +
-          '</div>'
+          "</strong> have been accepted.</p>" +
+          '<p class="pp-done-hint">If you need to change answers later, contact an administrator to reopen the session.</p>' +
+          '<div class="pp-done-actions">' +
+          '<button type="button" class="primary" id="pp-review-answers">Review answers</button>' +
+          "</div>" +
+          "</div>",
       );
+      var reviewBtn = document.getElementById("pp-review-answers");
+      if (reviewBtn) {
+        reviewBtn.addEventListener("click", function () {
+          enterReviewMode();
+        });
+      }
       return;
     }
 
@@ -797,63 +1073,79 @@
     var section = item.section;
     var type = questionType(q);
     var existing = state.answersByQuestion[q.sharedId];
-    var qText = metaVal(q, 'poll_question_text') || q.title;
-    var html = '';
+    var qText = metaVal(q, "poll_question_text") || q.title;
+    var html = "";
     html += sectionGuidanceLinkHtml();
 
     html +=
       '<p class="pp-section">' +
-      escapeHtml('Section ' + (metaVal(section, 'poll_number') || '') + ' — ' + section.title) +
-      '</p>';
+      escapeHtml(
+        "Section " +
+          (metaVal(section, "poll_number") || "") +
+          " — " +
+          section.title,
+      ) +
+      "</p>";
     html += progressHtml();
 
-    if (type === 'instructions') {
-      html += '<p class="pp-muted pp-guidance-note">These are instructions for the section — no answer required.</p>';
-      html += '<div class="pp-instructions"><div class="pp-qtext">' + escapeHtml(qText) + '</div></div>';
+    if (type === "instructions") {
+      html +=
+        '<p class="pp-muted pp-guidance-note">These are instructions for the section — no answer required.</p>';
+      html +=
+        '<div class="pp-instructions"><div class="pp-qtext">' +
+        escapeHtml(qText) +
+        "</div></div>";
     } else {
       html +=
         '<p class="pp-qnum">Question ' +
-        (metaVal(q, 'poll_number') || '') +
-        ' in this section</p>';
-      html += '<p class="pp-qtext">' + escapeHtml(qText) + '</p>';
+        (metaVal(q, "poll_number") || "") +
+        " in this section</p>";
+      html += '<p class="pp-qtext">' + escapeHtml(qText) + "</p>";
       if (questionIsRequired(q)) {
         html += '<p class="pp-required-note">* Required question</p>';
       } else {
         html += '<p class="pp-optional-note">Optional question</p>';
       }
 
-      if (type === 'choice' || type === 'choice_and_text') {
+      if (type === "choice" || type === "choice_and_text") {
         html += optionInputs(q, existing);
       }
-      if (type === 'numeric') {
-        var nval = metaVal(existing, 'poll_numeric');
-        if (nval === undefined) nval = '';
+      if (type === "numeric") {
+        var nval = metaVal(existing, "poll_numeric");
+        if (nval === undefined) nval = "";
         html +=
           '<div class="pp-field"><label for="pp-numeric">Your answer</label>' +
           '<input id="pp-numeric" type="number" value="' +
           escapeHtml(nval) +
           '" /></div>';
       }
-      if (type === 'date') {
-        var dval = dateToInputValue(metaVal(existing, 'poll_date'));
+      if (type === "date") {
+        var dval = dateToInputValue(metaVal(existing, "poll_date"));
         html +=
           '<div class="pp-field"><label for="pp-date">Your answer</label>' +
           '<input id="pp-date" type="date" value="' +
           escapeHtml(dval) +
           '" /></div>';
       }
-      if (type === 'free_text' || type === 'choice_and_text') {
-        var tval = metaVal(existing, 'poll_text') || '';
-        var prompt = metaVal(q, 'poll_text_prompt') || (type === 'choice_and_text' ? 'Additional comments (optional)' : 'Your answer');
-        var requiredNote = type === 'free_text' ? '' : ' <span class="pp-muted">(optional)</span>';
+      if (type === "free_text" || type === "choice_and_text") {
+        var tval = metaVal(existing, "poll_text") || "";
+        var prompt =
+          metaVal(q, "poll_text_prompt") ||
+          (type === "choice_and_text"
+            ? "Additional comments (optional)"
+            : "Your answer");
+        var requiredNote =
+          type === "free_text"
+            ? ""
+            : ' <span class="pp-muted">(optional)</span>';
         html +=
           '<div class="pp-field"><label for="pp-text">' +
           escapeHtml(prompt) +
           requiredNote +
-          '</label>' +
+          "</label>" +
           '<textarea id="pp-text">' +
           escapeHtml(tval) +
-          '</textarea></div>';
+          "</textarea></div>";
       }
     }
 
@@ -861,39 +1153,44 @@
     html += '<div class="pp-actions">';
     html +=
       '<button type="button" id="pp-prev"' +
-      (state.index === 0 ? ' disabled' : '') +
-      '>Previous</button>';
+      (state.index === 0 ? " disabled" : "") +
+      ">Previous</button>";
     var isLast = state.index === state.items.length - 1;
-    var canSkip = !state.preview && !isLast && isAnswerable(q);
+    var readOnly = isReadOnly();
+    var canSkip = !readOnly && !isLast && isAnswerable(q);
     html += '<div class="pp-actions-end">';
     if (canSkip) {
       html +=
         '<button type="button" class="pp-skip" id="pp-skip" title="Leave unanswered and go to the next item">Skip</button>';
     }
-    if (state.preview) {
+    if (readOnly) {
       if (!isLast) {
-        html += '<button type="button" class="primary" id="pp-next">Next</button>';
-      } else {
         html +=
-          '<span class="pp-muted pp-preview-end">End of preview</span>';
+          '<button type="button" class="primary" id="pp-next">Next</button>';
+      } else if (state.preview) {
+        html += '<span class="pp-muted pp-preview-end">End of preview</span>';
+      } else {
+        html += '<span class="pp-muted pp-preview-end">End of review</span>';
       }
     } else if (isLast) {
-      html += '<button type="button" class="primary" id="pp-accept">Accept &amp; finish</button>';
+      html +=
+        '<button type="button" class="primary" id="pp-accept">Accept &amp; finish</button>';
     } else {
-      html += '<button type="button" class="primary" id="pp-next">Next</button>';
+      html +=
+        '<button type="button" class="primary" id="pp-next">Next</button>';
     }
-    html += '</div></div>';
+    html += "</div></div>";
 
     renderShell(html);
 
-    if (state.preview) {
-      var locks = root.querySelectorAll('input, textarea, select');
+    if (readOnly) {
+      var locks = root.querySelectorAll("input, textarea, select");
       for (var li = 0; li < locks.length; li++) {
         locks[li].disabled = true;
       }
     }
 
-    var errEl = document.getElementById('pp-err');
+    var errEl = document.getElementById("pp-err");
     function showErr(msg) {
       if (!errEl) return;
       if (msg) {
@@ -901,23 +1198,27 @@
         errEl.textContent = msg;
       } else {
         errEl.hidden = true;
-        errEl.textContent = '';
+        errEl.textContent = "";
       }
     }
 
     function formHasInput(form) {
       if (form.options && form.options.length) return true;
       if (form.text) return true;
-      if (form.numeric !== null && form.numeric !== undefined && !Number.isNaN(form.numeric)) {
+      if (
+        form.numeric !== null &&
+        form.numeric !== undefined &&
+        !Number.isNaN(form.numeric)
+      ) {
         return true;
       }
       if (form.date !== null && form.date !== undefined) return true;
       return false;
     }
 
-    var prev = document.getElementById('pp-prev');
+    var prev = document.getElementById("pp-prev");
     if (prev) {
-      prev.addEventListener('click', function () {
+      prev.addEventListener("click", function () {
         if (state.index > 0) {
           state.index -= 1;
           renderQuestion();
@@ -928,7 +1229,7 @@
     /** @param {{ allowEmpty?: boolean }} [opts] */
     async function saveCurrent(opts) {
       opts = opts || {};
-      if (state.preview) return true;
+      if (isReadOnly()) return true;
       if (!isAnswerable(q)) return true;
       var form = readForm(q);
       if (opts.allowEmpty && !formHasInput(form)) {
@@ -958,18 +1259,18 @@
       return stats.total - stats.answered;
     }
 
-    var skip = document.getElementById('pp-skip');
+    var skip = document.getElementById("pp-skip");
     if (skip) {
-      skip.addEventListener('click', function () {
+      skip.addEventListener("click", function () {
         showErr(null);
         state.index += 1;
         renderQuestion();
       });
     }
 
-    var next = document.getElementById('pp-next');
+    var next = document.getElementById("pp-next");
     if (next) {
-      next.addEventListener('click', async function () {
+      next.addEventListener("click", async function () {
         if (await saveCurrent()) {
           state.index += 1;
           renderQuestion();
@@ -977,9 +1278,9 @@
       });
     }
 
-    var accept = document.getElementById('pp-accept');
+    var accept = document.getElementById("pp-accept");
     if (accept) {
-      accept.addEventListener('click', async function () {
+      accept.addEventListener("click", async function () {
         // Save if they filled something; otherwise leave this question unanswered.
         if (!(await saveCurrent({ allowEmpty: true }))) return;
         var answerable = state.items
@@ -992,21 +1293,23 @@
               answerable,
               state.answersByQuestion,
               CONFIG.yesNo,
-              questionType
+              questionType,
             )
           : answerable.filter(function (qq) {
-              return questionIsRequired(qq) && !state.answersByQuestion[qq.sharedId];
+              return (
+                questionIsRequired(qq) && !state.answersByQuestion[qq.sharedId]
+              );
             });
         if (missingRequired.length) {
           var blockMsg = PR
             ? PR.finishBlockedMessage(missingRequired.length)
             : missingRequired.length +
-              ' required question(s) still unanswered. Open the table of contents to find them.';
+              " required question(s) still unanswered. Open the table of contents to find them.";
           var goToc = await openConfirmModal({
-            title: 'Required questions missing',
+            title: "Required questions missing",
             message: blockMsg,
-            confirmLabel: 'Open table of contents',
-            cancelLabel: 'Keep editing',
+            confirmLabel: "Open table of contents",
+            cancelLabel: "Keep editing",
           });
           if (goToc) {
             state.tocOpen = true;
@@ -1016,20 +1319,20 @@
         }
         var left = unansweredCount();
         var msg =
-          'Once finished, you will not be able to change answers unless an administrator reopens the session.';
+          "Once finished, you will not be able to change answers unless an administrator reopens the session.";
         if (left > 0) {
           msg =
             (left === 1
-              ? '1 optional question is still unanswered. '
-              : left + ' optional questions are still unanswered. ') +
-            'Finish anyway? ' +
+              ? "1 optional question is still unanswered. "
+              : left + " optional questions are still unanswered. ") +
+            "Finish anyway? " +
             msg;
         }
         var ok = await openConfirmModal({
-          title: 'Finish this session?',
+          title: "Finish this session?",
           message: msg,
-          confirmLabel: 'Accept & finish',
-          cancelLabel: 'Keep editing',
+          confirmLabel: "Accept & finish",
+          cancelLabel: "Keep editing",
         });
         if (!ok) return;
         setBusy(true);
@@ -1054,18 +1357,21 @@
       poll_session: [{ value: state.session.sharedId }],
       poll_question: [{ value: q.sharedId }],
     };
-    if ((type === 'choice' || type === 'choice_and_text') && form.options.length) {
+    if (
+      (type === "choice" || type === "choice_and_text") &&
+      form.options.length
+    ) {
       metadata.poll_selected_options = form.options.map(function (v) {
         return { value: v };
       });
     }
-    if ((type === 'free_text' || type === 'choice_and_text') && form.text) {
+    if ((type === "free_text" || type === "choice_and_text") && form.text) {
       metadata.poll_text = [{ value: form.text }];
     }
-    if (type === 'numeric' && form.numeric !== null) {
+    if (type === "numeric" && form.numeric !== null) {
       metadata.poll_numeric = [{ value: form.numeric }];
     }
-    if (type === 'date' && form.date !== null && form.date !== undefined) {
+    if (type === "date" && form.date !== null && form.date !== undefined) {
       metadata.poll_date = [{ value: form.date }];
     }
     return metadata;
@@ -1075,22 +1381,22 @@
     var existing = state.answersByQuestion[q.sharedId];
     var metadata = buildAnswerMetadata(q, form);
     var title =
-      'S' +
-      (metaVal(currentItem().section, 'poll_number') || '') +
-      ' Q' +
-      (metaVal(q, 'poll_number') || '');
+      "S" +
+      (metaVal(currentItem().section, "poll_number") || "") +
+      " Q" +
+      (metaVal(q, "poll_number") || "");
     var payload = {
       title: title,
       template: CONFIG.templates.Answer,
       metadata: metadata,
       published: false,
-      language: 'en',
+      language: "en",
     };
     if (existing) {
       payload._id = existing._id;
       payload.sharedId = existing.sharedId;
     }
-    var saved = await api('POST', '/api/entities', payload);
+    var saved = await api("POST", "/api/entities", payload);
     var entity = saved.entity || saved;
     state.answersByQuestion[q.sharedId] = entity;
     await persistSessionProgress();
@@ -1112,23 +1418,24 @@
       poll_session_status: [
         {
           value:
-            metaVal(s, 'poll_session_status') || CONFIG.sessionStatus.in_progress,
+            metaVal(s, "poll_session_status") ||
+            CONFIG.sessionStatus.in_progress,
         },
       ],
       poll_respondent: [
         {
           value:
-            metaVal(s, 'poll_respondent') ||
+            metaVal(s, "poll_respondent") ||
             (state.user && state.user.username) ||
             s.title ||
-            '',
+            "",
         },
       ],
     };
-    var token = metaVal(s, 'poll_token');
+    var token = metaVal(s, "poll_token");
     if (token) metadata.poll_token = [{ value: token }];
-    var acceptedAt = metaVal(s, 'poll_accepted_at');
-    if (acceptedAt !== undefined && acceptedAt !== null && acceptedAt !== '') {
+    var acceptedAt = metaVal(s, "poll_accepted_at");
+    if (acceptedAt !== undefined && acceptedAt !== null && acceptedAt !== "") {
       metadata.poll_accepted_at = [{ value: acceptedAt }];
     } else {
       metadata.poll_accepted_at = [];
@@ -1152,10 +1459,10 @@
       title: state.session.title,
       template: CONFIG.templates.Session,
       published: false,
-      language: 'en',
+      language: "en",
       metadata: buildSessionMetadata(),
     };
-    var saved = await api('POST', '/api/entities', payload);
+    var saved = await api("POST", "/api/entities", payload);
     state.session = saved.entity || saved;
   }
 
@@ -1170,25 +1477,28 @@
       title: state.session.title,
       template: CONFIG.templates.Session,
       published: false,
-      language: 'en',
+      language: "en",
       metadata: metadata,
     };
-    var saved = await api('POST', '/api/entities', payload);
+    var saved = await api("POST", "/api/entities", payload);
     state.session = saved.entity || saved;
   }
 
   async function loadEntity(sharedId) {
-    var data = await api('GET', '/api/entities?sharedId=' + encodeURIComponent(sharedId));
+    var data = await api(
+      "GET",
+      "/api/entities?sharedId=" + encodeURIComponent(sharedId),
+    );
     var rows = data.rows || (Array.isArray(data) ? data : [data]);
     return rows[0];
   }
 
   async function searchByTemplate(templateId) {
     var url =
-      '/api/search?types=' +
+      "/api/search?types=" +
       encodeURIComponent(JSON.stringify([templateId])) +
-      '&includeUnpublished=true&limit=3000';
-    var data = await api('GET', url);
+      "&includeUnpublished=true&limit=3000";
+    var data = await api("GET", url);
     return data.rows || [];
   }
 
@@ -1196,17 +1506,20 @@
     var sessions = await searchByTemplate(CONFIG.templates.Session);
     var match = sessions.find(function (s) {
       return (
-        metaVal(s, 'poll_poll') === state.pollId &&
-        String(metaVal(s, 'poll_token') || '') === String(token)
+        metaVal(s, "poll_poll") === state.pollId &&
+        String(metaVal(s, "poll_token") || "") === String(token)
       );
     });
     if (!match) {
       throw new Error(
-        'No session found for this poll and token. Ask an admin for a valid session link.'
+        "No session found for this poll and token. Ask an admin for a valid session link.",
       );
     }
     state.session = match;
-    if (metaVal(state.session, 'poll_session_status') === CONFIG.sessionStatus.accepted) {
+    if (
+      metaVal(state.session, "poll_session_status") ===
+      CONFIG.sessionStatus.accepted
+    ) {
       state.done = true;
     }
   }
@@ -1215,8 +1528,8 @@
     var answers = await searchByTemplate(CONFIG.templates.Answer);
     state.answersByQuestion = {};
     answers.forEach(function (a) {
-      if (metaVal(a, 'poll_session') === state.session.sharedId) {
-        var qid = metaVal(a, 'poll_question');
+      if (metaVal(a, "poll_session") === state.session.sharedId) {
+        var qid = metaVal(a, "poll_question");
         if (qid) state.answersByQuestion[qid] = a;
       }
     });
@@ -1230,10 +1543,10 @@
 
     var items = questions
       .filter(function (q) {
-        return metaVal(q, 'poll_poll') === state.pollId;
+        return metaVal(q, "poll_poll") === state.pollId;
       })
       .map(function (q) {
-        var sid = metaVal(q, 'poll_section');
+        var sid = metaVal(q, "poll_section");
         return { question: q, section: state.sectionsById[sid] };
       })
       .filter(function (item) {
@@ -1242,64 +1555,67 @@
 
     items.sort(function (a, b) {
       var sn =
-        (metaVal(a.section, 'poll_number') || 0) - (metaVal(b.section, 'poll_number') || 0);
+        (metaVal(a.section, "poll_number") || 0) -
+        (metaVal(b.section, "poll_number") || 0);
       if (sn !== 0) return sn;
-      return (metaVal(a.question, 'poll_number') || 0) - (metaVal(b.question, 'poll_number') || 0);
+      return (
+        (metaVal(a.question, "poll_number") || 0) -
+        (metaVal(b.question, "poll_number") || 0)
+      );
     });
     return items;
   }
 
-
   async function loadSiteName() {
     try {
-      var settings = await api('GET', '/api/settings');
-      var name = (settings && (settings.site_name || settings.siteName)) || '';
-      return String(name || '').trim() || 'Uwazi';
+      var settings = await api("GET", "/api/settings");
+      var name = (settings && (settings.site_name || settings.siteName)) || "";
+      return String(name || "").trim() || "Uwazi";
     } catch (e) {
-      return 'Uwazi';
+      return "Uwazi";
     }
   }
 
   function renderSorryPage(opts) {
     opts = opts || {};
-    var site = opts.siteName || 'Uwazi';
+    var site = opts.siteName || "Uwazi";
     var title = opts.title || "We couldn't open this poll";
-    var message = opts.message || '';
-    var hint = opts.hint || '';
-    var html = '';
+    var message = opts.message || "";
+    var hint = opts.hint || "";
+    var html = "";
     html += '<div class="pp-sorry">';
-    html += '<p class="pp-sorry-brand">' + escapeHtml(site) + '</p>';
-    html += '<h2 class="pp-sorry-title">' + escapeHtml(title) + '</h2>';
+    html += '<p class="pp-sorry-brand">' + escapeHtml(site) + "</p>";
+    html += '<h2 class="pp-sorry-title">' + escapeHtml(title) + "</h2>";
     if (message) {
-      html += '<p class="pp-sorry-message">' + escapeHtml(message) + '</p>';
+      html += '<p class="pp-sorry-message">' + escapeHtml(message) + "</p>";
     }
     if (hint) {
-      html += '<p class="pp-sorry-hint">' + escapeHtml(hint) + '</p>';
+      html += '<p class="pp-sorry-hint">' + escapeHtml(hint) + "</p>";
     }
-    html += '</div>';
+    html += "</div>";
     setPollTitle(null);
     renderShell(html);
   }
 
   async function init() {
     var params = new URLSearchParams(window.location.search);
-    state.pollId = params.get('poll') || '';
-    state.token = params.get('token') || '';
-    state.preview = params.get('preview') === '1';
+    state.pollId = params.get("poll") || "";
+    state.token = params.get("token") || "";
+    state.preview = params.get("preview") === "1";
     setPreviewBanner(state.preview);
     if (!state.pollId || !state.token) {
       var siteMissing = await loadSiteName();
       var missingBits = [];
-      if (!state.pollId) missingBits.push('poll id');
-      if (!state.token) missingBits.push('session token');
+      if (!state.pollId) missingBits.push("poll id");
+      if (!state.token) missingBits.push("session token");
       renderSorryPage({
         siteName: siteMissing,
         title: "We couldn't open this poll",
         message:
-          'This link is missing a ' +
-          missingBits.join(' and a ') +
-          '. Polls can only be opened from a session invite.',
-        hint: 'Ask your administrator for a link from Poll admin → Sessions (it includes both poll and token).',
+          "This link is missing a " +
+          missingBits.join(" and a ") +
+          ". Polls can only be opened from a session invite.",
+        hint: "Ask your administrator for a link from Poll admin → Sessions (it includes both poll and token).",
       });
       return;
     }
@@ -1309,9 +1625,9 @@
       var siteLogin = await loadSiteName();
       renderSorryPage({
         siteName: siteLogin,
-        title: 'Sign in to continue',
-        message: 'You need to be logged in to answer this poll.',
-        hint: 'Log in to this collection, then open your session link again.',
+        title: "Sign in to continue",
+        message: "You need to be logged in to answer this poll.",
+        hint: "Log in to this collection, then open your session link again.",
       });
       return;
     }
@@ -1322,12 +1638,14 @@
       await resolveConfigFromInstance();
 
       state.poll = await loadEntity(state.pollId);
-      if (!state.poll) throw new Error('Poll not found.');
+      if (!state.poll) throw new Error("Poll not found.");
       setPollTitle(state.poll.title);
 
-      var sections = (await searchByTemplate(CONFIG.templates.Section)).filter(function (s) {
-        return metaVal(s, 'poll_poll') === state.pollId;
-      });
+      var sections = (await searchByTemplate(CONFIG.templates.Section)).filter(
+        function (s) {
+          return metaVal(s, "poll_poll") === state.pollId;
+        },
+      );
       var questions = await searchByTemplate(CONFIG.templates.Question);
       state.items = buildItems(sections, questions);
 
@@ -1335,9 +1653,9 @@
         var siteEmpty = await loadSiteName();
         renderSorryPage({
           siteName: siteEmpty,
-          title: 'This poll is empty',
-          message: 'There are no questions to answer yet.',
-          hint: 'Check back later, or ask your administrator if you expected content here.',
+          title: "This poll is empty",
+          message: "There are no questions to answer yet.",
+          hint: "Check back later, or ask your administrator if you expected content here.",
         });
         return;
       }
@@ -1350,7 +1668,7 @@
           await persistSessionProgress();
         } catch (progressErr) {
           // Progress cache is best-effort; answering still works.
-          console.warn('Could not update session progress', progressErr);
+          console.warn("Could not update session progress", progressErr);
         }
       }
 
@@ -1376,7 +1694,7 @@
         siteName: siteErr,
         title: "We couldn't open this poll",
         message: msg,
-        hint: 'If you were given a session link, confirm it is complete and still valid, or ask your administrator for a new one.',
+        hint: "If you were given a session link, confirm it is complete and still valid, or ask your administrator for a new one.",
       });
     }
   }

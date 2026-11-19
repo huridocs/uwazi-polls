@@ -1,12 +1,24 @@
 /* Poll admin — visual alignment with Uwazi V2 theme tokens (Tailwind/CSS vars). */
 
 .pa {
-  --pa-ink: var(--color-theme-action-primary, var(--color-theme-text-primary, #1a1a1a));
+  --pa-ink: var(
+    --color-theme-action-primary,
+    var(--color-theme-text-primary, #1a1a1a)
+  );
   --pa-ink-secondary: var(--color-theme-text-secondary, #444444);
   --pa-ink-muted: var(--color-theme-text-tertiary, #666666);
-  --pa-paper: var(--color-theme-surface-raised, var(--color-theme-bg-surface, #ffffff));
-  --pa-warm: var(--color-theme-surface-warm, var(--color-theme-bg-warm, #fcfaf8));
-  --pa-vellum: var(--color-theme-surface-muted, var(--color-theme-bg-muted, #f5f3f0));
+  --pa-paper: var(
+    --color-theme-surface-raised,
+    var(--color-theme-bg-surface, #ffffff)
+  );
+  --pa-warm: var(
+    --color-theme-surface-warm,
+    var(--color-theme-bg-warm, #fcfaf8)
+  );
+  --pa-vellum: var(
+    --color-theme-surface-muted,
+    var(--color-theme-bg-muted, #f5f3f0)
+  );
   --pa-parchment: var(
     --color-theme-surface-parchment,
     var(--color-theme-surface-page, var(--color-theme-bg-primary, #f5f3f0))
@@ -133,7 +145,10 @@
   background: var(--pa-paper);
   color: var(--pa-ink);
   cursor: pointer;
-  transition: background-color 0.12s ease, opacity 0.12s ease, border-color 0.12s ease;
+  transition:
+    background-color 0.12s ease,
+    opacity 0.12s ease,
+    border-color 0.12s ease;
 }
 
 .pa-btn:hover {
@@ -195,36 +210,14 @@
   background: var(--pa-warm);
 }
 
-.pa-row-actions {
+/* Must beat `.pa-table td { text-align: left }` (higher specificity). */
+.pa-table td.pa-row-actions {
   white-space: nowrap;
   width: 1%;
   text-align: right;
-}
-
-.pa-row-actions .pa-btn {
-  margin: 0.1rem 0.15rem 0.1rem 0;
-}
-
-.pa-row-actions .pa-btn:last-child {
-  margin-right: 0;
-}
-
-/* Compact icon actions for the poll list (mobile-friendly). */
-.pa-btn.pa-btn-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.35rem;
-  min-width: 1.85rem;
-  min-height: 1.85rem;
-  line-height: 0;
+  position: relative;
+  overflow: visible;
   vertical-align: middle;
-}
-
-.pa-btn.pa-btn-icon svg {
-  width: 1.05rem;
-  height: 1.05rem;
-  display: block;
 }
 
 .pa-q-required,
@@ -249,20 +242,88 @@
   background: var(--pa-vellum);
 }
 
-/* Sessions: keep action buttons on one row in their own column (no overflow into dates). */
 .pa-table.pa-sessions-table td {
   vertical-align: middle;
 }
 
-.pa-table.pa-sessions-table .pa-row-actions {
-  white-space: nowrap;
+.pa-actions-menu {
+  position: relative;
+  display: inline-block;
+  text-align: left;
+  vertical-align: middle;
 }
 
-.pa-table.pa-sessions-table .pa-row-actions .pa-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.pa-actions-menu > summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.pa-actions-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.pa-actions-menu-toggle::after {
+  content: "";
+  display: inline-block;
+  margin-left: 0.4rem;
+  border: 0.28rem solid transparent;
+  border-top-color: currentColor;
   vertical-align: middle;
+  transform: translateY(0.1rem);
+}
+
+.pa-actions-menu[open] > .pa-actions-menu-toggle::after {
+  transform: translateY(-0.05rem) rotate(180deg);
+}
+
+.pa-actions-menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.25rem);
+  z-index: 40;
+  min-width: 11.5rem;
+  padding: 0.3rem;
+  border: 1px solid var(--pa-border);
+  border-radius: var(--pa-radius-sm, 6px);
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.pa-actions-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  padding: 0.45rem 0.6rem;
+  margin: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--pa-ink);
+  cursor: pointer;
+}
+
+.pa-actions-menu-item:hover,
+.pa-actions-menu-item:focus-visible {
+  background: var(--pa-warm);
+  outline: none;
+}
+
+.pa-actions-menu-item.pa-actions-menu-danger {
+  color: var(--pa-danger);
+}
+
+.pa-actions-menu-item.pa-actions-menu-danger:hover,
+.pa-actions-menu-item.pa-actions-menu-danger:focus-visible {
+  background: var(--pa-danger-bg);
+}
+
+.pa-actions-menu-note {
+  margin: 0.35rem 0.6rem;
+  font-size: 0.75rem;
 }
 
 .pa-icon-btn {
@@ -512,7 +573,7 @@
   display: none !important;
 }
 
-.pa-check-row input[type='checkbox'] {
+.pa-check-row input[type="checkbox"] {
   -webkit-appearance: auto;
   appearance: auto;
   width: 0.875rem;
@@ -552,8 +613,8 @@
   outline: none;
 }
 
-.pa-field input[type='text'],
-.pa-field input[type='number'],
+.pa-field input[type="text"],
+.pa-field input[type="number"],
 .pa-field textarea,
 .pa-field select {
   width: 100%;
@@ -795,7 +856,8 @@
   padding-top: max(1rem, 3.5rem);
   background: color-mix(
     in srgb,
-    var(--color-theme-surface-overlay, var(--color-theme-bg-overlay, #1a1a1a)) 65%,
+    var(--color-theme-surface-overlay, var(--color-theme-bg-overlay, #1a1a1a))
+      65%,
     transparent
   );
 }
@@ -805,7 +867,9 @@
   color: var(--pa-ink);
   border-radius: var(--pa-radius);
   border: 1px solid color-mix(in srgb, var(--pa-border) 45%, transparent);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.12);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.12);
   width: 100%;
   max-width: 36rem;
   max-height: calc(100dvh - 2rem - 3.5rem);
@@ -1019,7 +1083,6 @@
   font-size: 0.75rem;
 }
 
-
 .pa-toast {
   display: flex;
   flex-wrap: wrap;
@@ -1074,7 +1137,6 @@
   font-size: 0.8rem;
 }
 
-
 .pa-import-status {
   margin: 0.5rem 1.25rem 0;
   padding: 0.45rem 0.65rem;
@@ -1084,7 +1146,6 @@
   color: var(--pa-ink);
   font-size: 0.875rem;
 }
-
 
 .pa-delete-warning {
   margin: 0 0 0.75rem;
