@@ -80,6 +80,7 @@ const EXPECTED_TEMPLATES = [
       { label: 'Poll question text', type: 'markdown' },
       { label: 'Poll type', type: 'select', thesaurus: 'qType', filter: true },
       { label: 'Poll allow multiple', type: 'select', thesaurus: 'yesNo', filter: true },
+      { label: 'Poll required', type: 'select', thesaurus: 'yesNo', filter: true },
       { label: 'Poll text prompt', type: 'text' },
       {
         label: 'Poll section',

@@ -1,9 +1,10 @@
 /* Poll admin — pages-based; requires logged-in admin/editor.
- * Expects PollSmDetails + PollDelete (lib/) to be loaded first when published via seed:pages.
+ * Expects PollSmDetails + PollDelete + PollRequired (lib/) when published via seed:pages.
  */
 (function () {
   var SM = typeof PollSmDetails !== 'undefined' ? PollSmDetails : null;
   var PD = typeof PollDelete !== 'undefined' ? PollDelete : null;
+  var PR = typeof PollRequired !== 'undefined' ? PollRequired : null;
   var DOCS_URL =
     'https://github.com/huridocs/uwazi-polls#surveymonkey-import--export';
 
@@ -149,6 +150,13 @@
         {
           name: 'poll_allow_multiple',
           label: 'Poll allow multiple',
+          type: 'select',
+          thesaurus: 'yesNo',
+          filter: true,
+        },
+        {
+          name: 'poll_required',
+          label: 'Poll required',
           type: 'select',
           thesaurus: 'yesNo',
           filter: true,
@@ -566,6 +574,25 @@
     var id = metaVal(q, 'poll_type');
     for (var k in CONFIG.qType) if (CONFIG.qType[k] === id) return k;
     return '—';
+  }
+
+  function questionTypeKey(q) {
+    var lab = String(qTypeLabel(q) || '').toLowerCase();
+    if (lab.indexOf('instruction') !== -1) return 'instructions';
+    if (lab === 'choice + other field' || lab === 'choice_and_text') return 'choice_and_text';
+    if (lab === 'open text' || lab === 'free_text') return 'free_text';
+    if (lab === 'choice' || lab === 'numeric' || lab === 'date') return lab;
+    var id = metaVal(q, 'poll_type');
+    for (var k in CONFIG.qType) if (CONFIG.qType[k] === id) return k;
+    return '';
+  }
+
+  function questionIsRequired(q) {
+    if (PR) return PR.isQuestionRequired(q, CONFIG.yesNo, questionTypeKey);
+    if (questionTypeKey(q) === 'instructions') return false;
+    var raw = metaVal(q, 'poll_required');
+    if (raw === undefined || raw === null || raw === '') return true;
+    return raw !== CONFIG.yesNo.no;
   }
 
   function shortText(q) {
@@ -1545,6 +1572,13 @@
               '">' +
               escapeHtml(shortText(q)) +
               '</button>';
+            if (questionIsRequired(q)) {
+              html +=
+                '<span class="pa-q-required" title="Required question">Required</span>';
+            } else if (typ !== 'instructions' && typ !== 'Section / instructions') {
+              html +=
+                '<span class="pa-q-optional" title="Optional question">Optional</span>';
+            }
             html += '<span class="pa-qtype">' + escapeHtml(typ) + '</span>';
             html +=
               '<button type="button" class="pa-btn pa-btn-danger pa-del-q" data-id="' +
@@ -2369,7 +2403,15 @@
 
   function buildQuestionMetadataFromEntity(q) {
     var md = {};
-    ['poll_question_text', 'poll_type', 'poll_allow_multiple', 'poll_text_prompt', 'poll_section', 'poll_poll'].forEach(
+    [
+      'poll_question_text',
+      'poll_type',
+      'poll_allow_multiple',
+      'poll_required',
+      'poll_text_prompt',
+      'poll_section',
+      'poll_poll',
+    ].forEach(
       function (key) {
         var list = metaList(q, key);
         if (list.length) md[key] = list.map(function (e) {
@@ -2693,12 +2735,6 @@
     html += modalErrorHtml();
     html += '<div class="pa-form">';
 
-    var text = isNew ? '' : metaVal(q, 'poll_question_text') || '';
-    html +=
-      '<div class="pa-field"><label for="pa-qtext">Text</label><textarea id="pa-qtext" class="pa-qtext">' +
-      escapeHtml(text) +
-      '</textarea></div>';
-
     var sectionIdForNum = isNew ? q.sectionId : metaVal(q, 'poll_section');
     var siblingsForNum = questionsForSection(sectionIdForNum);
     var sectionNum = isNew
@@ -2715,6 +2751,12 @@
       escapeHtml(pollNum) +
       '</span> <span class="pa-muted">(assigned automatically)</span>' +
       '</p>';
+
+    var text = isNew ? '' : metaVal(q, 'poll_question_text') || '';
+    html +=
+      '<div class="pa-field"><label for="pa-qtext">Text</label><textarea id="pa-qtext" class="pa-qtext">' +
+      escapeHtml(text) +
+      '</textarea></div>';
 
     if (!asGuidance) {
       var curType = isNew ? CONFIG.qType.choice : metaVal(q, 'poll_type') || CONFIG.qType.choice;
@@ -2739,12 +2781,24 @@
       html += '</select></div>';
 
       var multi = !isNew && metaVal(q, 'poll_allow_multiple') === CONFIG.yesNo.yes;
+      var requiredChecked = isNew || questionIsRequired(q);
+      html += '<div class="pa-field pa-check-row">';
       html +=
-        '<div class="pa-field" id="pa-multi-wrap"' +
+        '<label class="pa-check" id="pa-multi-wrap"' +
         (typeNeedsMulti(curType) ? '' : ' hidden') +
-        '><label><input id="pa-multi" type="checkbox"' +
+        '><input id="pa-multi" type="checkbox"' +
         (multi ? ' checked' : '') +
-        ' /> Allow multiple selections</label></div>';
+        ' /><span>Allow multiple selections</span></label>';
+      html +=
+        '<label class="pa-check" id="pa-required-wrap">' +
+        '<input id="pa-required" type="checkbox"' +
+        (requiredChecked ? ' checked' : '') +
+        ' /><span>Required answer</span>' +
+        '<span class="pa-info-tip" tabindex="0" role="img" ' +
+        'title="Optional questions can be skipped; finish is blocked until all required ones are answered." ' +
+        'aria-label="Optional questions can be skipped; finish is blocked until all required ones are answered.">i</span>' +
+        '</label>';
+      html += '</div>';
       html +=
         '<div class="pa-field" id="pa-prompt-wrap"' +
         (typeNeedsPrompt(curType) ? '' : ' hidden') +
@@ -2778,11 +2832,19 @@
       state.optionDraft.length +
       ')</span></label>';
 
+    html +=
+      '<div class="pa-opt-combo">' +
+      '<label class="pa-sr-only" for="pa-opt-search">Add option</label>' +
+      '<input id="pa-opt-search" type="text" placeholder="Search or create an option…" autocomplete="off" ' +
+      'role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="pa-opt-results" />' +
+      '<div class="pa-opt-results" id="pa-opt-results" role="listbox" hidden></div>' +
+      '</div>';
+
     if (!state.optionDraft.length) {
       html +=
         '<div class="pa-opts-empty" role="status">' +
         '<p class="pa-opts-empty-title">No options yet</p>' +
-        '<p class="pa-opts-empty-body">Search below to reuse an existing option, or type a new label and press Enter.</p>' +
+        '<p class="pa-opts-empty-body">Search above to reuse an existing option, or type a new label and press Enter.</p>' +
         '</div>';
     } else {
       html += '<ul class="pa-optlist" id="pa-optlist">';
@@ -2807,13 +2869,6 @@
         '<p class="pa-muted pa-opts-hint">Drag ⋮⋮ to reorder. Changes save with the question.</p>';
     }
 
-    html +=
-      '<div class="pa-opt-combo">' +
-      '<label class="pa-sr-only" for="pa-opt-search">Add option</label>' +
-      '<input id="pa-opt-search" type="text" placeholder="Search or create an option…" autocomplete="off" ' +
-      'role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="pa-opt-results" />' +
-      '<div class="pa-opt-results" id="pa-opt-results" role="listbox" hidden></div>' +
-      '</div>';
     html += '</div>';
     return html;
   }
@@ -3202,6 +3257,14 @@
       !asGuidance && document.getElementById('pa-multi') && document.getElementById('pa-multi').checked
         ? CONFIG.yesNo.yes
         : CONFIG.yesNo.no;
+    var requiredVal = CONFIG.yesNo.yes;
+    if (!asGuidance && document.getElementById('pa-required')) {
+      requiredVal = document.getElementById('pa-required').checked
+        ? CONFIG.yesNo.yes
+        : CONFIG.yesNo.no;
+    } else if (asGuidance) {
+      requiredVal = CONFIG.yesNo.no;
+    }
     var prompt =
       !asGuidance && document.getElementById('pa-prompt')
         ? (document.getElementById('pa-prompt').value || '').trim()
@@ -3226,6 +3289,7 @@
       poll_section: [{ value: sectionId }],
       poll_poll: [{ value: state.poll.sharedId }],
       poll_allow_multiple: [{ value: allowMulti }],
+      poll_required: [{ value: requiredVal }],
     };
     if (prompt) metadata.poll_text_prompt = [{ value: prompt }];
     if (!asGuidance && typeNeedsOptions(typeId)) {
@@ -3740,6 +3804,7 @@
                 text: metaVal(q, 'poll_question_text') || q.title || '',
                 kind: kind,
                 allowMultiple: metaVal(q, 'poll_allow_multiple') === CONFIG.yesNo.yes,
+                required: kind === 'instructions' ? false : questionIsRequired(q),
                 choices: choices,
               };
             }),
@@ -4380,13 +4445,19 @@
         var it = job.it;
         var typeId = CONFIG.qType.free_text;
         var allowMulti = CONFIG.yesNo.no;
-        if (it.kind === 'instructions') typeId = CONFIG.qType.instructions;
-        else if (it.kind === 'numeric') typeId = CONFIG.qType.numeric;
+        var requiredVal = CONFIG.yesNo.yes;
+        if (it.kind === 'instructions') {
+          typeId = CONFIG.qType.instructions;
+          requiredVal = CONFIG.yesNo.no;
+        } else if (it.kind === 'numeric') typeId = CONFIG.qType.numeric;
         else if (it.kind === 'date') typeId = CONFIG.qType.date;
         else if (it.kind === 'choice') {
           typeId = CONFIG.qType.choice;
           allowMulti = it.allowMultiple ? CONFIG.yesNo.yes : CONFIG.yesNo.no;
         } else if (it.kind === 'free_text') typeId = CONFIG.qType.free_text;
+        if (it.kind !== 'instructions') {
+          requiredVal = it.required === false ? CONFIG.yesNo.no : CONFIG.yesNo.yes;
+        }
 
         var optionIds = [];
         if (it.kind === 'choice') {
@@ -4409,6 +4480,7 @@
           poll_section: [{ value: job.sectionSharedId }],
           poll_poll: [{ value: poll.sharedId }],
           poll_allow_multiple: [{ value: allowMulti }],
+          poll_required: [{ value: requiredVal }],
         };
         if (optionIds.length) {
           metadata.poll_available_options = optionIds.map(function (id) {

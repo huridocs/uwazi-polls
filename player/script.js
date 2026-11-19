@@ -1,5 +1,8 @@
-/* Poll player — ?poll=<sharedId> (defaults to GTI 2026) */
+/* Poll player — ?poll=<sharedId> (defaults to GTI 2026)
+ * Expects PollRequired (lib/) when published via seed:pages.
+ */
 (function () {
+  var PR = typeof PollRequired !== 'undefined' ? PollRequired : null;
   var NS = '[Poll] ';
   var CONFIG = {
     defaultPollId: '',
@@ -132,6 +135,14 @@
   function isAnswerable(q) {
     var t = questionType(q);
     return t && t !== 'instructions';
+  }
+
+  function questionIsRequired(q) {
+    if (PR) return PR.isQuestionRequired(q, CONFIG.yesNo, questionType);
+    if (!isAnswerable(q)) return false;
+    var raw = metaVal(q, 'poll_required');
+    if (raw === undefined || raw === null || raw === '') return true;
+    return raw !== CONFIG.yesNo.no;
   }
 
   function allowMultiple(q) {
@@ -574,6 +585,9 @@
         else if (status === 'answered') cls += ' pp-toc-answered';
         else cls += ' pp-toc-pending';
         if (current) cls += ' pp-toc-current';
+        var required = questionIsRequired(q);
+        if (required) cls += ' pp-toc-required';
+        if (required && status === 'pending') cls += ' pp-toc-required-missing';
         var num = metaVal(q, 'poll_number') || '';
         var prefix = type === 'instructions' ? 'Info' : 'Q' + num;
         sectionItemsHtml +=
@@ -585,7 +599,11 @@
           escapeHtml(prefix) +
           '</span><span class="pp-toc-label">' +
           escapeHtml(shortQuestionLabel(q)) +
-          '</span></button></li>';
+          '</span>' +
+          (required
+            ? '<span class="pp-toc-req" title="Required question">*</span>'
+            : '') +
+          '</button></li>';
       });
       if (!visibleCount) return;
       html += '<section class="pp-toc-section">';
@@ -798,6 +816,11 @@
         (metaVal(q, 'poll_number') || '') +
         ' in this section</p>';
       html += '<p class="pp-qtext">' + escapeHtml(qText) + '</p>';
+      if (questionIsRequired(q)) {
+        html += '<p class="pp-required-note">* Required question</p>';
+      } else {
+        html += '<p class="pp-optional-note">Optional question</p>';
+      }
 
       if (type === 'choice' || type === 'choice_and_text') {
         html += optionInputs(q, existing);
@@ -959,14 +982,46 @@
       accept.addEventListener('click', async function () {
         // Save if they filled something; otherwise leave this question unanswered.
         if (!(await saveCurrent({ allowEmpty: true }))) return;
+        var answerable = state.items
+          .map(function (it) {
+            return it.question;
+          })
+          .filter(isAnswerable);
+        var missingRequired = PR
+          ? PR.missingRequiredQuestions(
+              answerable,
+              state.answersByQuestion,
+              CONFIG.yesNo,
+              questionType
+            )
+          : answerable.filter(function (qq) {
+              return questionIsRequired(qq) && !state.answersByQuestion[qq.sharedId];
+            });
+        if (missingRequired.length) {
+          var blockMsg = PR
+            ? PR.finishBlockedMessage(missingRequired.length)
+            : missingRequired.length +
+              ' required question(s) still unanswered. Open the table of contents to find them.';
+          var goToc = await openConfirmModal({
+            title: 'Required questions missing',
+            message: blockMsg,
+            confirmLabel: 'Open table of contents',
+            cancelLabel: 'Keep editing',
+          });
+          if (goToc) {
+            state.tocOpen = true;
+            renderView();
+          }
+          return;
+        }
         var left = unansweredCount();
         var msg =
           'Once finished, you will not be able to change answers unless an administrator reopens the session.';
         if (left > 0) {
           msg =
             (left === 1
-              ? '1 question is still unanswered. '
-              : left + ' questions are still unanswered. ') +
+              ? '1 optional question is still unanswered. '
+              : left + ' optional questions are still unanswered. ') +
             'Finish anyway? ' +
             msg;
         }

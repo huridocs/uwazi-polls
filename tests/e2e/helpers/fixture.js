@@ -47,6 +47,7 @@ async function createMixedPollFixture(request) {
     poll_question_text: [{ value: 'Welcome guidance' }],
     poll_type: [{ value: schema.qType.instructions }],
     poll_allow_multiple: [{ value: schema.yesNo.no }],
+    poll_required: [{ value: schema.yesNo.no }],
     poll_section: [{ value: secA.sharedId }],
     poll_poll: [{ value: poll.sharedId }],
   });
@@ -55,6 +56,7 @@ async function createMixedPollFixture(request) {
     poll_question_text: [{ value: 'Alpha choice question' }],
     poll_type: [{ value: schema.qType.choice }],
     poll_allow_multiple: [{ value: schema.yesNo.no }],
+    poll_required: [{ value: schema.yesNo.yes }],
     poll_section: [{ value: secA.sharedId }],
     poll_poll: [{ value: poll.sharedId }],
     poll_available_options: [{ value: optYes.sharedId }, { value: optNo.sharedId }],
@@ -64,6 +66,7 @@ async function createMixedPollFixture(request) {
     poll_question_text: [{ value: 'Beta free text' }],
     poll_type: [{ value: schema.qType.free_text }],
     poll_allow_multiple: [{ value: schema.yesNo.no }],
+    poll_required: [{ value: schema.yesNo.no }],
     poll_section: [{ value: secB.sharedId }],
     poll_poll: [{ value: poll.sharedId }],
   });
@@ -72,6 +75,7 @@ async function createMixedPollFixture(request) {
     poll_question_text: [{ value: 'Beta date question' }],
     poll_type: [{ value: schema.qType.date }],
     poll_allow_multiple: [{ value: schema.yesNo.no }],
+    poll_required: [{ value: schema.yesNo.no }],
     poll_section: [{ value: secB.sharedId }],
     poll_poll: [{ value: poll.sharedId }],
   });

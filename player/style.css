@@ -164,10 +164,25 @@
 
 .pp-qtext {
   font-size: 1rem;
-  margin: 0 0 1.25rem;
+  margin: 0 0 0.35rem;
   line-height: 1.4;
   color: var(--pp-ink);
   white-space: pre-wrap;
+}
+
+.pp p.pp-required-note {
+  margin: 0 0 0.85rem;
+  font-size: 10px; /* half-ish of prior ~13px; px avoids browser min-size clamping on tiny rems */
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--pp-danger);
+}
+
+.pp p.pp-optional-note {
+  margin: 0 0 0.85rem;
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--pp-ink-muted);
 }
 
 .pp-field {
@@ -532,6 +547,19 @@ button.pp-toc-pill.pp-toc-filter-on {
 
 .pp-toc-label {
   flex: 1;
+  min-width: 0;
+}
+
+.pp-toc-req {
+  flex: 0 0 auto;
+  font-weight: 700;
+  color: var(--pp-danger);
+  line-height: 1;
+  padding-top: 0.1rem;
+}
+
+.pp-toc-item.pp-toc-required-missing {
+  border-color: color-mix(in srgb, var(--pp-danger) 40%, var(--pp-border));
 }
 
 .pp-toc-item.pp-toc-answered {
@@ -665,6 +693,7 @@ button.pp-toc-pill.pp-toc-filter-on {
 
 .pp-btn:hover {
   background: var(--pp-vellum);
+  color: var(--pp-ink);
 }
 
 
@@ -750,5 +779,9 @@ button.pp-toc-pill.pp-toc-filter-on {
 }
 
 .pp-btn-primary:hover {
-  filter: brightness(1.08);
+  /* Keep dark fill + light text; generic .pp-btn:hover must not wash this out. */
+  background: var(--pp-ink);
+  border-color: var(--pp-ink);
+  color: var(--pp-on-solid);
+  opacity: 0.9;
 }
