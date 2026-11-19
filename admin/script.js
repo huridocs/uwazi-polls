@@ -1,108 +1,109 @@
 /* Poll admin — pages-based; requires logged-in admin/editor.
- * Expects PollSmDetails + PollDelete + PollRequired (lib/) when published via seed:pages.
+ * Expects PollSmDetails + PollDelete + PollRequired + PollExport (lib/) when published via seed:pages.
  */
 (function () {
-  var SM = typeof PollSmDetails !== 'undefined' ? PollSmDetails : null;
-  var PD = typeof PollDelete !== 'undefined' ? PollDelete : null;
-  var PR = typeof PollRequired !== 'undefined' ? PollRequired : null;
+  var SM = typeof PollSmDetails !== "undefined" ? PollSmDetails : null;
+  var PD = typeof PollDelete !== "undefined" ? PollDelete : null;
+  var PR = typeof PollRequired !== "undefined" ? PollRequired : null;
+  var PE = typeof PollExport !== "undefined" ? PollExport : null;
   var DOCS_URL =
-    'https://github.com/huridocs/uwazi-polls#surveymonkey-import--export';
+    "https://github.com/huridocs/uwazi-polls#surveymonkey-import--export";
 
   var CONFIG = {
     // Filled at runtime by matching [Poll] names/labels on the instance.
     templates: {
-      Option: '',
-      Poll: '',
-      Section: '',
-      Question: '',
-      Session: '',
-      Answer: '',
+      Option: "",
+      Poll: "",
+      Section: "",
+      Question: "",
+      Session: "",
+      Answer: "",
     },
     qType: {
-      choice: '',
-      free_text: '',
-      numeric: '',
-      date: '',
-      choice_and_text: '',
-      instructions: '',
+      choice: "",
+      free_text: "",
+      numeric: "",
+      date: "",
+      choice_and_text: "",
+      instructions: "",
     },
     pollStatus: {
-      draft: '',
-      published: '',
-      closed: '',
+      draft: "",
+      published: "",
+      closed: "",
     },
     yesNo: {
-      yes: '',
-      no: '',
+      yes: "",
+      no: "",
     },
     sessionStatus: {
-      in_progress: '',
-      accepted: '',
+      in_progress: "",
+      accepted: "",
     },
     thesauri: {
-      pollStatus: '',
-      qType: '',
-      yesNo: '',
-      sessionStatus: '',
+      pollStatus: "",
+      qType: "",
+      yesNo: "",
+      sessionStatus: "",
     },
     relationTypes: {
-      belongs: '',
-      hasOption: '',
-      selected: '',
+      belongs: "",
+      hasOption: "",
+      selected: "",
     },
     // Set at boot from the "Poll player" Page on this instance (never hardcode sharedIds).
-    playerPage: '',
+    playerPage: "",
   };
 
   /** Match by name/label only; ids are refreshed from whatever exists on the instance. */
-  var NS = '[Poll] ';
+  var NS = "[Poll] ";
 
   var EXPECTED_RELATION_TYPES = [
-    { key: 'belongs', name: NS + 'belongs to' },
-    { key: 'hasOption', name: NS + 'has option' },
-    { key: 'selected', name: NS + 'selected option' },
+    { key: "belongs", name: NS + "belongs to" },
+    { key: "hasOption", name: NS + "has option" },
+    { key: "selected", name: NS + "selected option" },
   ];
 
   var EXPECTED_THESAURI = [
     {
-      key: 'pollStatus',
-      name: NS + 'Poll status',
-      valuesKey: 'pollStatus',
+      key: "pollStatus",
+      name: NS + "Poll status",
+      valuesKey: "pollStatus",
       values: [
-        { key: 'draft', label: 'draft' },
-        { key: 'published', label: 'published' },
-        { key: 'closed', label: 'closed' },
+        { key: "draft", label: "draft" },
+        { key: "published", label: "published" },
+        { key: "closed", label: "closed" },
       ],
     },
     {
-      key: 'qType',
-      name: NS + 'Question type',
-      valuesKey: 'qType',
+      key: "qType",
+      name: NS + "Question type",
+      valuesKey: "qType",
       values: [
-        { key: 'choice', label: 'choice' },
-        { key: 'free_text', label: 'free_text' },
-        { key: 'numeric', label: 'numeric' },
-        { key: 'date', label: 'date' },
-        { key: 'choice_and_text', label: 'choice_and_text' },
-        { key: 'instructions', label: 'instructions' },
+        { key: "choice", label: "choice" },
+        { key: "free_text", label: "free_text" },
+        { key: "numeric", label: "numeric" },
+        { key: "date", label: "date" },
+        { key: "choice_and_text", label: "choice_and_text" },
+        { key: "instructions", label: "instructions" },
       ],
     },
     {
-      key: 'yesNo',
-      name: NS + 'Yes No',
-      valuesKey: 'yesNo',
+      key: "yesNo",
+      name: NS + "Yes No",
+      valuesKey: "yesNo",
       values: [
-        { key: 'yes', label: 'yes' },
-        { key: 'no', label: 'no' },
+        { key: "yes", label: "yes" },
+        { key: "no", label: "no" },
       ],
     },
     {
-      key: 'sessionStatus',
-      name: NS + 'Session status',
-      valuesKey: 'sessionStatus',
+      key: "sessionStatus",
+      name: NS + "Session status",
+      valuesKey: "sessionStatus",
       values: [
-        { key: 'in_progress', label: 'in_progress' },
-        { key: 'accepted', label: 'accepted' },
+        { key: "in_progress", label: "in_progress" },
+        { key: "accepted", label: "accepted" },
       ],
     },
   ];
@@ -110,152 +111,187 @@
   /** Expected poll domain templates — matched by name; properties by name/type/links. */
   var EXPECTED_TEMPLATES = [
     {
-      key: 'Option',
-      name: NS + 'Option',
-      properties: [
-        { name: 'poll_label', label: 'Poll label', type: 'text' },
-      ],
+      key: "Option",
+      name: NS + "Option",
+      properties: [{ name: "poll_label", label: "Poll label", type: "text" }],
     },
     {
-      key: 'Poll',
-      name: NS + 'Poll',
+      key: "Poll",
+      name: NS + "Poll",
       properties: [
-        { name: 'poll_description', label: 'Poll description', type: 'markdown' },
-        { name: 'poll_status', label: 'Poll status', type: 'select', thesaurus: 'pollStatus', filter: true },
-      ],
-    },
-    {
-      key: 'Section',
-      name: NS + 'Section',
-      properties: [
-        { name: 'poll_number', label: 'Poll number', type: 'numeric', filter: true },
-        { name: 'poll_description', label: 'Poll description', type: 'markdown' },
         {
-          name: 'poll_poll',
-          label: 'Poll poll',
-          type: 'relationship',
-          contentKey: 'Poll',
-          relationTypeKey: 'belongs',
+          name: "poll_description",
+          label: "Poll description",
+          type: "markdown",
+        },
+        {
+          name: "poll_status",
+          label: "Poll status",
+          type: "select",
+          thesaurus: "pollStatus",
           filter: true,
         },
       ],
     },
     {
-      key: 'Question',
-      name: NS + 'Question',
+      key: "Section",
+      name: NS + "Section",
       properties: [
-        { name: 'poll_number', label: 'Poll number', type: 'numeric' },
-        { name: 'poll_question_text', label: 'Poll question text', type: 'markdown' },
-        { name: 'poll_type', label: 'Poll type', type: 'select', thesaurus: 'qType', filter: true },
         {
-          name: 'poll_allow_multiple',
-          label: 'Poll allow multiple',
-          type: 'select',
-          thesaurus: 'yesNo',
+          name: "poll_number",
+          label: "Poll number",
+          type: "numeric",
           filter: true,
         },
         {
-          name: 'poll_required',
-          label: 'Poll required',
-          type: 'select',
-          thesaurus: 'yesNo',
-          filter: true,
-        },
-        { name: 'poll_text_prompt', label: 'Poll text prompt', type: 'text' },
-        {
-          name: 'poll_section',
-          label: 'Poll section',
-          type: 'relationship',
-          contentKey: 'Section',
-          relationTypeKey: 'belongs',
-          filter: true,
+          name: "poll_description",
+          label: "Poll description",
+          type: "markdown",
         },
         {
-          name: 'poll_poll',
-          label: 'Poll poll',
-          type: 'relationship',
-          contentKey: 'Poll',
-          relationTypeKey: 'belongs',
+          name: "poll_poll",
+          label: "Poll poll",
+          type: "relationship",
+          contentKey: "Poll",
+          relationTypeKey: "belongs",
           filter: true,
-        },
-        {
-          name: 'poll_available_options',
-          label: 'Poll available options',
-          type: 'relationship',
-          contentKey: 'Option',
-          relationTypeKey: 'hasOption',
         },
       ],
     },
     {
-      key: 'Session',
-      name: NS + 'Session',
+      key: "Question",
+      name: NS + "Question",
       properties: [
+        { name: "poll_number", label: "Poll number", type: "numeric" },
         {
-          name: 'poll_poll',
-          label: 'Poll poll',
-          type: 'relationship',
-          contentKey: 'Poll',
-          relationTypeKey: 'belongs',
+          name: "poll_question_text",
+          label: "Poll question text",
+          type: "markdown",
+        },
+        {
+          name: "poll_type",
+          label: "Poll type",
+          type: "select",
+          thesaurus: "qType",
           filter: true,
         },
         {
-          name: 'poll_session_status',
-          label: 'Poll session status',
-          type: 'select',
-          thesaurus: 'sessionStatus',
+          name: "poll_allow_multiple",
+          label: "Poll allow multiple",
+          type: "select",
+          thesaurus: "yesNo",
           filter: true,
         },
-        { name: 'poll_respondent', label: 'Poll respondent', type: 'text' },
-        { name: 'poll_accepted_at', label: 'Poll accepted at', type: 'date' },
-        { name: 'poll_token', label: 'Poll token', type: 'text' },
-        { name: 'poll_answered_count', label: 'Poll answered count', type: 'numeric' },
-        { name: 'poll_question_count', label: 'Poll question count', type: 'numeric' },
+        {
+          name: "poll_required",
+          label: "Poll required",
+          type: "select",
+          thesaurus: "yesNo",
+          filter: true,
+        },
+        { name: "poll_text_prompt", label: "Poll text prompt", type: "text" },
+        {
+          name: "poll_section",
+          label: "Poll section",
+          type: "relationship",
+          contentKey: "Section",
+          relationTypeKey: "belongs",
+          filter: true,
+        },
+        {
+          name: "poll_poll",
+          label: "Poll poll",
+          type: "relationship",
+          contentKey: "Poll",
+          relationTypeKey: "belongs",
+          filter: true,
+        },
+        {
+          name: "poll_available_options",
+          label: "Poll available options",
+          type: "relationship",
+          contentKey: "Option",
+          relationTypeKey: "hasOption",
+        },
       ],
     },
     {
-      key: 'Answer',
-      name: NS + 'Answer',
+      key: "Session",
+      name: NS + "Session",
       properties: [
         {
-          name: 'poll_session',
-          label: 'Poll session',
-          type: 'relationship',
-          contentKey: 'Session',
-          relationTypeKey: 'belongs',
+          name: "poll_poll",
+          label: "Poll poll",
+          type: "relationship",
+          contentKey: "Poll",
+          relationTypeKey: "belongs",
           filter: true,
         },
         {
-          name: 'poll_question',
-          label: 'Poll question',
-          type: 'relationship',
-          contentKey: 'Question',
-          relationTypeKey: 'belongs',
+          name: "poll_session_status",
+          label: "Poll session status",
+          type: "select",
+          thesaurus: "sessionStatus",
+          filter: true,
+        },
+        { name: "poll_respondent", label: "Poll respondent", type: "text" },
+        { name: "poll_accepted_at", label: "Poll accepted at", type: "date" },
+        { name: "poll_token", label: "Poll token", type: "text" },
+        {
+          name: "poll_answered_count",
+          label: "Poll answered count",
+          type: "numeric",
+        },
+        {
+          name: "poll_question_count",
+          label: "Poll question count",
+          type: "numeric",
+        },
+      ],
+    },
+    {
+      key: "Answer",
+      name: NS + "Answer",
+      properties: [
+        {
+          name: "poll_session",
+          label: "Poll session",
+          type: "relationship",
+          contentKey: "Session",
+          relationTypeKey: "belongs",
           filter: true,
         },
         {
-          name: 'poll_selected_options',
-          label: 'Poll selected options',
-          type: 'relationship',
-          contentKey: 'Option',
-          relationTypeKey: 'selected',
+          name: "poll_question",
+          label: "Poll question",
+          type: "relationship",
+          contentKey: "Question",
+          relationTypeKey: "belongs",
           filter: true,
         },
-        { name: 'poll_text', label: 'Poll text', type: 'text' },
-        { name: 'poll_numeric', label: 'Poll numeric', type: 'numeric' },
-        { name: 'poll_date', label: 'Poll date', type: 'date' },
+        {
+          name: "poll_selected_options",
+          label: "Poll selected options",
+          type: "relationship",
+          contentKey: "Option",
+          relationTypeKey: "selected",
+          filter: true,
+        },
+        { name: "poll_text", label: "Poll text", type: "text" },
+        { name: "poll_numeric", label: "Poll numeric", type: "numeric" },
+        { name: "poll_date", label: "Poll date", type: "date" },
       ],
     },
   ];
 
-  var root = document.getElementById('poll-admin');
+  var root = document.getElementById("poll-admin");
   if (!root) return;
-  var cardEl = document.getElementById('pa-card') || root;
-  var pageHeadEl = document.getElementById('pa-page-head');
-  var pageFootEl = document.getElementById('pa-page-foot');
+  var cardEl = document.getElementById("pa-card") || root;
+  var pageHeadEl = document.getElementById("pa-page-head");
+  var pageFootEl = document.getElementById("pa-page-foot");
 
   var state = {
-    view: 'list', // list | structure | sessions
+    view: "list", // list | structure | sessions
     user: null,
     polls: [],
     poll: null,
@@ -290,11 +326,11 @@
     thesaurusReport: null,
     relationTypeReport: null,
     // Import modal
-    importSource: 'sm', // sm | json
-    importToken: '',
-    importSurveyId: '',
-    importApiBase: 'eu', // eu | us | ca
-    importJson: '',
+    importSource: "sm", // sm | json
+    importToken: "",
+    importSurveyId: "",
+    importApiBase: "eu", // eu | us | ca
+    importJson: "",
     importPreview: null,
     importPreviewOpen: false,
     importProgress: null, // string while creating
@@ -303,51 +339,32 @@
 
   function escapeHtml(s) {
     return String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   }
 
   /** Outline SVGs (Heroicons-style) for compact list actions. */
-  function iconSvg(inner) {
+  function pollListActionsMenuHtml(sharedId) {
+    var id = escapeHtml(sharedId);
     return (
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" ' +
-      'stroke="currentColor" stroke-width="1.75" stroke-linecap="round" ' +
-      'stroke-linejoin="round" aria-hidden="true" focusable="false">' +
-      inner +
-      '</svg>'
-    );
-  }
-
-  var LIST_ICONS = {
-    structure: iconSvg(
-      '<path d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z"/>'
-    ),
-    sessions: iconSvg(
-      '<path d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z"/>'
-    ),
-    export: iconSvg(
-      '<path d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/>'
-    ),
-    trash: iconSvg(
-      '<path d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"/>'
-    ),
-  };
-
-  function listIconButton(className, sharedId, label, iconHtml) {
-    return (
-      '<button type="button" class="pa-btn pa-btn-icon ' +
-      className +
-      '" data-id="' +
-      escapeHtml(sharedId) +
-      '" title="' +
-      escapeHtml(label) +
-      '" aria-label="' +
-      escapeHtml(label) +
-      '">' +
-      iconHtml +
-      '</button>'
+      '<details class="pa-actions-menu">' +
+      '<summary class="pa-btn pa-actions-menu-toggle">Actions</summary>' +
+      '<div class="pa-actions-menu-panel" role="menu">' +
+      '<button type="button" role="menuitem" class="pa-actions-menu-item pa-structure" data-id="' +
+      id +
+      '">Edit structure</button>' +
+      '<button type="button" role="menuitem" class="pa-actions-menu-item pa-sessions" data-id="' +
+      id +
+      '">Manage sessions</button>' +
+      '<button type="button" role="menuitem" class="pa-actions-menu-item pa-export" data-id="' +
+      id +
+      '">Export SurveyMonkey JSON</button>' +
+      '<button type="button" role="menuitem" class="pa-actions-menu-item pa-actions-menu-danger pa-delete-poll" data-id="' +
+      id +
+      '">Delete poll</button>' +
+      "</div></details>"
     );
   }
 
@@ -388,7 +405,8 @@
   }
 
   function parseRetryAfterMs(res) {
-    var raw = res.headers && res.headers.get ? res.headers.get('Retry-After') : null;
+    var raw =
+      res.headers && res.headers.get ? res.headers.get("Retry-After") : null;
     if (!raw) return null;
     var asNum = Number(raw);
     if (!Number.isNaN(asNum)) return Math.max(0, asNum * 1000);
@@ -398,40 +416,44 @@
   }
 
   function shouldRetryStatus(status, bodyText) {
-    if (status === 429 || status === 502 || status === 503 || status === 504) return true;
+    if (status === 429 || status === 502 || status === 503 || status === 504)
+      return true;
     // Empty/HTML gateway bodies with 5xx
     if (status >= 500 && (!bodyText || /^\s*</.test(bodyText))) return true;
     return false;
   }
 
   function errorMessageFromResponse(res, data, textBody) {
-    var msg = '';
+    var msg = "";
     if (data) {
       if (
-        typeof data.error === 'string' &&
+        typeof data.error === "string" &&
         data.error &&
-        data.error.toLowerCase() !== 'validation failed' &&
-        data.error.toLowerCase() !== 'validation error'
+        data.error.toLowerCase() !== "validation failed" &&
+        data.error.toLowerCase() !== "validation error"
       ) {
         msg = data.error;
       } else if (data.prettyMessage) {
         var pretty = String(data.prettyMessage);
         var lines = pretty
-          .split('\n')
+          .split("\n")
           .map(function (l) {
             return l.trim();
           })
           .filter(Boolean);
         msg = lines.length ? lines[lines.length - 1] : pretty;
       } else if (data.error) {
-        msg = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+        msg =
+          typeof data.error === "string"
+            ? data.error
+            : JSON.stringify(data.error);
       } else if (data.message) {
         msg = data.message;
       }
     }
     if (!msg && res.statusText) msg = res.statusText;
-    if (!msg) msg = 'Request failed';
-    return 'HTTP ' + res.status + ': ' + msg;
+    if (!msg) msg = "Request failed";
+    return "HTTP " + res.status + ": " + msg;
   }
 
   async function api(method, path, body, opts) {
@@ -442,14 +464,14 @@
       attempt += 1;
       var fetchOpts = {
         method: method,
-        credentials: 'same-origin',
+        credentials: "same-origin",
         headers: {
-          'X-Requested-With': 'XMLHttpRequest',
-          Accept: 'application/json',
+          "X-Requested-With": "XMLHttpRequest",
+          Accept: "application/json",
         },
       };
       if (body !== undefined) {
-        fetchOpts.headers['Content-Type'] = 'application/json';
+        fetchOpts.headers["Content-Type"] = "application/json";
         fetchOpts.body = JSON.stringify(body);
       }
       var res;
@@ -459,7 +481,9 @@
         if (attempt >= maxAttempts) {
           throw new Error(netErr.message || String(netErr));
         }
-        await sleep(Math.min(30000, 500 * Math.pow(2, attempt - 1)) + Math.random() * 250);
+        await sleep(
+          Math.min(30000, 500 * Math.pow(2, attempt - 1)) + Math.random() * 250,
+        );
         continue;
       }
       var textBody = await res.text();
@@ -494,8 +518,8 @@
       '<a href="' +
       DOCS_URL +
       '" target="_blank" rel="noopener noreferrer">' +
-      escapeHtml(label || 'Documentation') +
-      '</a></p>'
+      escapeHtml(label || "Documentation") +
+      "</a></p>"
     );
   }
 
@@ -505,7 +529,7 @@
         pageHeadEl.innerHTML = pageHeadHtml;
         pageHeadEl.hidden = false;
       } else {
-        pageHeadEl.innerHTML = '';
+        pageHeadEl.innerHTML = "";
         pageHeadEl.hidden = true;
       }
     }
@@ -514,18 +538,18 @@
         pageFootEl.innerHTML = pageFootHtml;
         pageFootEl.hidden = false;
       } else {
-        pageFootEl.innerHTML = '';
+        pageFootEl.innerHTML = "";
         pageFootEl.hidden = true;
       }
     }
     cardEl.innerHTML = html;
-    if (state.modal) root.classList.add('pa-has-modal');
-    else root.classList.remove('pa-has-modal');
+    if (state.modal) root.classList.add("pa-has-modal");
+    else root.classList.remove("pa-has-modal");
   }
 
   function setBusy(busy) {
     state.busy = busy;
-    var buttons = root.querySelectorAll('button, input, select, textarea');
+    var buttons = root.querySelectorAll("button, input, select, textarea");
     for (var i = 0; i < buttons.length; i++) {
       if (buttons[i].dataset.keepEnabled) continue;
       buttons[i].disabled = busy;
@@ -538,15 +562,15 @@
 
   function errorHtml() {
     return state.error
-      ? '<p class="pa-error" id="pa-err">' + escapeHtml(state.error) + '</p>'
+      ? '<p class="pa-error" id="pa-err">' + escapeHtml(state.error) + "</p>"
       : '<p class="pa-error" id="pa-err" hidden></p>';
   }
 
   function toastHtml() {
-    if (!state.toast) return '';
+    if (!state.toast) return "";
     var t = state.toast;
     var html = '<div class="pa-toast" role="status">';
-    html += '<span>' + escapeHtml(t.message || 'Done.') + '</span>';
+    html += "<span>" + escapeHtml(t.message || "Done.") + "</span>";
     if (t.pollSharedId) {
       html +=
         ' <button type="button" class="pa-link" id="pa-toast-structure" data-id="' +
@@ -555,71 +579,74 @@
     }
     html +=
       ' <button type="button" class="pa-btn" id="pa-toast-dismiss">Dismiss</button>';
-    html += '</div>';
+    html += "</div>";
     return html;
   }
 
   function statusPill(poll) {
-    var lab = String(metaLabel(poll, 'poll_status') || 'draft').toLowerCase();
-    var cls = 'pa-pill';
-    if (lab === 'published') cls += ' published';
-    else if (lab === 'closed') cls += ' closed';
-    else cls += ' draft';
-    return '<span class="' + cls + '">' + escapeHtml(lab) + '</span>';
+    var lab = String(metaLabel(poll, "poll_status") || "draft").toLowerCase();
+    var cls = "pa-pill";
+    if (lab === "published") cls += " published";
+    else if (lab === "closed") cls += " closed";
+    else cls += " draft";
+    return '<span class="' + cls + '">' + escapeHtml(lab) + "</span>";
   }
 
   function qTypeLabel(q) {
-    var lab = metaLabel(q, 'poll_type');
+    var lab = metaLabel(q, "poll_type");
     if (lab) return String(lab);
-    var id = metaVal(q, 'poll_type');
+    var id = metaVal(q, "poll_type");
     for (var k in CONFIG.qType) if (CONFIG.qType[k] === id) return k;
-    return '—';
+    return "—";
   }
 
   function questionTypeKey(q) {
-    var lab = String(qTypeLabel(q) || '').toLowerCase();
-    if (lab.indexOf('instruction') !== -1) return 'instructions';
-    if (lab === 'choice + other field' || lab === 'choice_and_text') return 'choice_and_text';
-    if (lab === 'open text' || lab === 'free_text') return 'free_text';
-    if (lab === 'choice' || lab === 'numeric' || lab === 'date') return lab;
-    var id = metaVal(q, 'poll_type');
+    var lab = String(qTypeLabel(q) || "").toLowerCase();
+    if (lab.indexOf("instruction") !== -1) return "instructions";
+    if (lab === "choice + other field" || lab === "choice_and_text")
+      return "choice_and_text";
+    if (lab === "open text" || lab === "free_text") return "free_text";
+    if (lab === "choice" || lab === "numeric" || lab === "date") return lab;
+    var id = metaVal(q, "poll_type");
     for (var k in CONFIG.qType) if (CONFIG.qType[k] === id) return k;
-    return '';
+    return "";
   }
 
   function questionIsRequired(q) {
     if (PR) return PR.isQuestionRequired(q, CONFIG.yesNo, questionTypeKey);
-    if (questionTypeKey(q) === 'instructions') return false;
-    var raw = metaVal(q, 'poll_required');
-    if (raw === undefined || raw === null || raw === '') return true;
+    if (questionTypeKey(q) === "instructions") return false;
+    var raw = metaVal(q, "poll_required");
+    if (raw === undefined || raw === null || raw === "") return true;
     return raw !== CONFIG.yesNo.no;
   }
 
   function shortText(q) {
-    var t = metaVal(q, 'poll_question_text') || q.title || '';
-    var line = String(t)
-      .split('\n')
-      .map(function (s) {
-        return s.trim();
-      })
-      .filter(Boolean)[0] || 'Untitled';
-    return line.length > 90 ? line.slice(0, 87) + '...' : line;
+    var t = metaVal(q, "poll_question_text") || q.title || "";
+    var line =
+      String(t)
+        .split("\n")
+        .map(function (s) {
+          return s.trim();
+        })
+        .filter(Boolean)[0] || "Untitled";
+    return line.length > 90 ? line.slice(0, 87) + "..." : line;
   }
 
   function searchByTemplate(templateId) {
     var url =
-      '/api/search?types=' +
+      "/api/search?types=" +
       encodeURIComponent(JSON.stringify([templateId])) +
-      '&includeUnpublished=true&limit=3000';
-    return api('GET', url).then(function (data) {
+      "&includeUnpublished=true&limit=3000";
+    return api("GET", url).then(function (data) {
       return data.rows || [];
     });
   }
 
   function loadEntity(sharedId) {
-    return api('GET', '/api/entities?sharedId=' + encodeURIComponent(sharedId)).then(function (
-      data
-    ) {
+    return api(
+      "GET",
+      "/api/entities?sharedId=" + encodeURIComponent(sharedId),
+    ).then(function (data) {
       var rows = data.rows || (Array.isArray(data) ? data : [data]);
       return rows[0];
     });
@@ -628,25 +655,33 @@
   async function loadPolls() {
     state.polls = await searchByTemplate(CONFIG.templates.Poll);
     state.polls.sort(function (a, b) {
-      return String(a.title || '').localeCompare(String(b.title || ''));
+      return String(a.title || "").localeCompare(String(b.title || ""));
     });
   }
 
   async function loadStructure(pollSharedId) {
-    var sections = (await searchByTemplate(CONFIG.templates.Section)).filter(function (s) {
-      return metaVal(s, 'poll_poll') === pollSharedId;
-    });
+    var sections = (await searchByTemplate(CONFIG.templates.Section)).filter(
+      function (s) {
+        return metaVal(s, "poll_poll") === pollSharedId;
+      },
+    );
     sections.sort(function (a, b) {
-      return (metaVal(a, 'poll_number') || 0) - (metaVal(b, 'poll_number') || 0);
+      return (
+        (metaVal(a, "poll_number") || 0) - (metaVal(b, "poll_number") || 0)
+      );
     });
-    var questions = (await searchByTemplate(CONFIG.templates.Question)).filter(function (q) {
-      return metaVal(q, 'poll_poll') === pollSharedId;
-    });
+    var questions = (await searchByTemplate(CONFIG.templates.Question)).filter(
+      function (q) {
+        return metaVal(q, "poll_poll") === pollSharedId;
+      },
+    );
     questions.sort(function (a, b) {
-      var sa = metaVal(a, 'poll_section') || '';
-      var sb = metaVal(b, 'poll_section') || '';
+      var sa = metaVal(a, "poll_section") || "";
+      var sb = metaVal(b, "poll_section") || "";
       if (sa !== sb) return String(sa).localeCompare(String(sb));
-      return (metaVal(a, 'poll_number') || 0) - (metaVal(b, 'poll_number') || 0);
+      return (
+        (metaVal(a, "poll_number") || 0) - (metaVal(b, "poll_number") || 0)
+      );
     });
     state.sections = sections;
     state.questions = questions;
@@ -654,14 +689,15 @@
 
   function questionsForSection(sectionSharedId) {
     return state.questions.filter(function (q) {
-      return metaVal(q, 'poll_section') === sectionSharedId;
+      return metaVal(q, "poll_section") === sectionSharedId;
     });
   }
 
   function templatesOk() {
-    if (!state.templateReport) return !!(CONFIG.templates.Poll && CONFIG.templates.Session);
+    if (!state.templateReport)
+      return !!(CONFIG.templates.Poll && CONFIG.templates.Session);
     return state.templateReport.every(function (r) {
-      return r.status === 'ok';
+      return r.status === "ok";
     });
   }
 
@@ -670,53 +706,56 @@
     if (window.crypto && window.crypto.getRandomValues) {
       window.crypto.getRandomValues(bytes);
     } else {
-      for (var i = 0; i < bytes.length; i++) bytes[i] = (Math.random() * 256) | 0;
+      for (var i = 0; i < bytes.length; i++)
+        bytes[i] = (Math.random() * 256) | 0;
     }
-    var s = '';
-    for (var j = 0; j < bytes.length; j++) s += ('0' + bytes[j].toString(16)).slice(-2);
+    var s = "";
+    for (var j = 0; j < bytes.length; j++)
+      s += ("0" + bytes[j].toString(16)).slice(-2);
     return s;
   }
 
   function currentLangPrefix() {
-    var m = (window.location.pathname || '').match(/^\/([a-z]{2})(?:\/|$)/i);
-    return m ? '/' + m[1].toLowerCase() : '/en';
+    var m = (window.location.pathname || "").match(/^\/([a-z]{2})(?:\/|$)/i);
+    return m ? "/" + m[1].toLowerCase() : "/en";
   }
 
   /** Resolve player Page path for this host (OMCT vs local have different sharedIds). */
   async function resolvePlayerPage() {
-    var pages = await api('GET', '/api/pages');
+    var pages = await api("GET", "/api/pages");
     var rows = Array.isArray(pages) ? pages : pages.rows || [];
     var player = rows.find(function (p) {
-      var t = p.title || (p.locales && p.locales.en && p.locales.en.title) || '';
-      return String(t).trim() === 'Poll player';
+      var t =
+        p.title || (p.locales && p.locales.en && p.locales.en.title) || "";
+      return String(t).trim() === "Poll player";
     });
     if (!player || !player.sharedId) {
       throw new Error(
-        'Could not find a Page titled "Poll player". Publish the player page on this instance first.'
+        'Could not find a Page titled "Poll player". Publish the player page on this instance first.',
       );
     }
     CONFIG.playerPage =
-      currentLangPrefix() + '/page/' + player.sharedId + '/poll-player';
+      currentLangPrefix() + "/page/" + player.sharedId + "/poll-player";
   }
 
   function sessionPlayerUrl(pollSharedId, token, opts) {
     if (!CONFIG.playerPage) {
-      throw new Error('Player page path not resolved yet.');
+      throw new Error("Player page path not resolved yet.");
     }
     var url =
       CONFIG.playerPage +
-      '?poll=' +
+      "?poll=" +
       encodeURIComponent(pollSharedId) +
-      '&token=' +
+      "&token=" +
       encodeURIComponent(token);
-    if (opts && opts.preview) url += '&preview=1';
+    if (opts && opts.preview) url += "&preview=1";
     return url;
   }
 
   function sessionProgressCellHtml(session) {
-    var answered = metaVal(session, 'poll_answered_count');
-    var total = metaVal(session, 'poll_question_count');
-    if (total === undefined || total === null || total === '') {
+    var answered = metaVal(session, "poll_answered_count");
+    var total = metaVal(session, "poll_question_count");
+    if (total === undefined || total === null || total === "") {
       return '<span class="pa-muted">—</span>';
     }
     var a = Number(answered);
@@ -726,38 +765,38 @@
     var pct = t ? Math.min(100, Math.round((a / t) * 100)) : 0;
     return (
       '<div class="pa-sess-progress" title="' +
-      escapeHtml(a + ' of ' + t + ' answered') +
+      escapeHtml(a + " of " + t + " answered") +
       '">' +
       '<div class="pa-sess-bar"><span style="width:' +
       pct +
       '%"></span></div>' +
       '<span class="pa-sess-progress-label">' +
-      escapeHtml(String(a) + ' / ' + String(t)) +
-      '</span></div>'
+      escapeHtml(String(a) + " / " + String(t)) +
+      "</span></div>"
     );
   }
 
   function sessionStatusLabel(session) {
-    var id = metaVal(session, 'poll_session_status');
-    if (id === CONFIG.sessionStatus.accepted) return 'accepted';
-    if (id === CONFIG.sessionStatus.in_progress) return 'in_progress';
-    return metaLabel(session, 'poll_session_status') || '—';
+    var id = metaVal(session, "poll_session_status");
+    if (id === CONFIG.sessionStatus.accepted) return "accepted";
+    if (id === CONFIG.sessionStatus.in_progress) return "in_progress";
+    return metaLabel(session, "poll_session_status") || "—";
   }
 
   /** Format entity creationDate (ms) or date metadata (unix seconds) for the sessions table. */
   function formatSessionDate(raw) {
-    if (raw === undefined || raw === null || raw === '') return '—';
-    var n = typeof raw === 'number' ? raw : Number(raw);
-    if (!Number.isFinite(n) || n <= 0) return '—';
+    if (raw === undefined || raw === null || raw === "") return "—";
+    var n = typeof raw === "number" ? raw : Number(raw);
+    if (!Number.isFinite(n) || n <= 0) return "—";
     // Uwazi date properties are seconds; entity creationDate/editDate are ms.
     if (n < 1e12) n = n * 1000;
     var d = new Date(n);
-    if (Number.isNaN(d.getTime())) return '—';
+    if (Number.isNaN(d.getTime())) return "—";
     try {
       return d.toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
+        year: "numeric",
+        month: "short",
+        day: "numeric",
       });
     } catch (err) {
       return d.toISOString().slice(0, 10);
@@ -765,7 +804,14 @@
   }
 
   function nameEq(a, b) {
-    return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+    return (
+      String(a || "")
+        .trim()
+        .toLowerCase() ===
+      String(b || "")
+        .trim()
+        .toLowerCase()
+    );
   }
 
   function findByName(rows, name) {
@@ -789,19 +835,19 @@
   }
 
   async function loadAllTemplates() {
-    var data = await api('GET', '/api/templates');
+    var data = await api("GET", "/api/templates");
     state.allTemplates = data.rows || [];
     return state.allTemplates;
   }
 
   async function loadAllThesauri() {
-    var data = await api('GET', '/api/thesauris');
+    var data = await api("GET", "/api/thesauris");
     state.allThesauri = data.rows || data || [];
     return state.allThesauri;
   }
 
   async function loadAllRelationTypes() {
-    var data = await api('GET', '/api/relationtypes');
+    var data = await api("GET", "/api/relationtypes");
     state.allRelationTypes = data.rows || data || [];
     return state.allRelationTypes;
   }
@@ -873,7 +919,7 @@
   function evaluatePropertyConfig(want, have) {
     var notes = [];
     var fixable = false;
-    if (want.type === 'select') {
+    if (want.type === "select") {
       var wantTh = expectedThesaurusId(want);
       var thName = expectedThesaurusName(want);
       if (want.thesaurus) {
@@ -891,7 +937,7 @@
         }
       }
     }
-    if (want.type === 'relationship') {
+    if (want.type === "relationship") {
       var wantContent = expectedContentId(want);
       var wantRel = expectedRelationTypeId(want);
       var relName = expectedRelationTypeName(want);
@@ -900,10 +946,14 @@
           notes.push('target template "' + want.contentKey + '" missing');
           fixable = true;
         } else if (!have.content) {
-          notes.push('target template not set (expected "' + want.contentKey + '")');
+          notes.push(
+            'target template not set (expected "' + want.contentKey + '")',
+          );
           fixable = true;
         } else if (String(have.content) !== String(wantContent)) {
-          notes.push('target template wrong (expected "' + want.contentKey + '")');
+          notes.push(
+            'target template wrong (expected "' + want.contentKey + '")',
+          );
           fixable = true;
         } else {
           notes.push('target "' + want.contentKey + '"');
@@ -927,10 +977,12 @@
     var wantFilter = !!want.filter;
     var haveFilter = !!have.filter;
     if (wantFilter !== haveFilter) {
-      notes.push(wantFilter ? 'not set as filter' : 'unexpectedly set as filter');
+      notes.push(
+        wantFilter ? "not set as filter" : "unexpectedly set as filter",
+      );
       fixable = true;
     } else if (wantFilter) {
-      notes.push('use as filter');
+      notes.push("use as filter");
     }
     return { notes: notes, fixable: fixable };
   }
@@ -941,9 +993,9 @@
       return {
         key: spec.key,
         name: spec.name,
-        status: found ? 'ok' : 'missing',
+        status: found ? "ok" : "missing",
         found: found || null,
-        notes: found ? [] : ['Relationship type not found'],
+        notes: found ? [] : ["Relationship type not found"],
       };
     });
     state.relationTypeReport = report;
@@ -957,11 +1009,11 @@
         return {
           key: spec.key,
           name: spec.name,
-          status: 'missing',
+          status: "missing",
           thesaurus: null,
           missingValues: spec.values.slice(),
           valueResults: spec.values.map(function (v) {
-            return { key: v.key, label: v.label, status: 'missing' };
+            return { key: v.key, label: v.label, status: "missing" };
           }),
           spec: spec,
         };
@@ -971,14 +1023,14 @@
         var have = findThesaurusValueByLabel(found, want.label);
         if (!have) {
           missingValues.push(want);
-          return { key: want.key, label: want.label, status: 'missing' };
+          return { key: want.key, label: want.label, status: "missing" };
         }
-        return { key: want.key, label: want.label, status: 'ok' };
+        return { key: want.key, label: want.label, status: "ok" };
       });
       return {
         key: spec.key,
         name: spec.name,
-        status: missingValues.length ? 'invalid' : 'ok',
+        status: missingValues.length ? "invalid" : "ok",
         thesaurus: found,
         missingValues: missingValues,
         valueResults: valueResults,
@@ -1002,9 +1054,9 @@
         return {
           key: spec.key,
           name: spec.name,
-          status: 'missing',
+          status: "missing",
           template: null,
-          issues: ['Template not found'],
+          issues: ["Template not found"],
           missingProps: spec.properties.slice(),
           fixableProps: [],
           propResults: spec.properties.map(function (want) {
@@ -1012,7 +1064,7 @@
               name: want.name,
               label: want.label,
               type: want.type,
-              status: 'missing',
+              status: "missing",
               notes: [],
             };
           }),
@@ -1035,12 +1087,14 @@
         var have = byName[want.name];
         if (!have) {
           missingProps.push(want);
-          issues.push('Missing property "' + want.label + '" (' + want.name + ')');
+          issues.push(
+            'Missing property "' + want.label + '" (' + want.name + ")",
+          );
           propResults.push({
             name: want.name,
             label: want.label,
             type: want.type,
-            status: 'missing',
+            status: "missing",
             notes: [],
           });
           return;
@@ -1051,14 +1105,14 @@
               want.name +
               '" type is ' +
               have.type +
-              ', expected ' +
-              want.type
+              ", expected " +
+              want.type,
           );
           propResults.push({
             name: want.name,
             label: want.label,
             type: want.type,
-            status: 'type_mismatch',
+            status: "type_mismatch",
             actualType: have.type,
             notes: [],
           });
@@ -1068,15 +1122,20 @@
         if (cfg.fixable) {
           fixableProps.push({ want: want, have: have });
           issues.push(
-            'Property "' + want.name + '": ' + cfg.notes.filter(function (n) {
-              return n.indexOf('wrong') >= 0 || n.indexOf('not set') >= 0;
-            }).join('; ')
+            'Property "' +
+              want.name +
+              '": ' +
+              cfg.notes
+                .filter(function (n) {
+                  return n.indexOf("wrong") >= 0 || n.indexOf("not set") >= 0;
+                })
+                .join("; "),
           );
           propResults.push({
             name: want.name,
             label: want.label,
             type: want.type,
-            status: 'config_mismatch',
+            status: "config_mismatch",
             notes: cfg.notes,
           });
           return;
@@ -1085,14 +1144,14 @@
           name: want.name,
           label: want.label,
           type: want.type,
-          status: 'ok',
+          status: "ok",
           notes: cfg.notes,
         });
       });
       return {
         key: spec.key,
         name: spec.name,
-        status: issues.length ? 'invalid' : 'ok',
+        status: issues.length ? "invalid" : "ok",
         template: found,
         issues: issues,
         missingProps: missingProps,
@@ -1110,19 +1169,19 @@
       state.templateReport &&
       state.templateReport.length &&
       state.templateReport.every(function (r) {
-        return r.status === 'ok';
+        return r.status === "ok";
       });
     var thOk =
       state.thesaurusReport &&
       state.thesaurusReport.length &&
       state.thesaurusReport.every(function (r) {
-        return r.status === 'ok';
+        return r.status === "ok";
       });
     var rtOk =
       state.relationTypeReport &&
       state.relationTypeReport.length &&
       state.relationTypeReport.every(function (r) {
-        return r.status === 'ok';
+        return r.status === "ok";
       });
     return !!(tOk && thOk && rtOk);
   }
@@ -1130,16 +1189,18 @@
   function configNeedsCreate() {
     var needTpl = (state.templateReport || []).some(function (r) {
       return (
-        r.status === 'missing' ||
+        r.status === "missing" ||
         (r.missingProps && r.missingProps.length) ||
         (r.fixableProps && r.fixableProps.length)
       );
     });
     var needTh = (state.thesaurusReport || []).some(function (r) {
-      return r.status === 'missing' || (r.missingValues && r.missingValues.length);
+      return (
+        r.status === "missing" || (r.missingValues && r.missingValues.length)
+      );
     });
     var needRt = (state.relationTypeReport || []).some(function (r) {
-      return r.status === 'missing';
+      return r.status === "missing";
     });
     return needTpl || needTh || needRt;
   }
@@ -1165,16 +1226,16 @@
       state.thesaurusReport &&
       state.relationTypeReport
     );
-    var cls = 'pa-btn pa-config-btn';
-    if (!checked) cls += ' pa-config-unknown';
-    else if (ok) cls += ' pa-config-ok';
-    else cls += ' pa-config-bad';
-    var icon = !checked ? '' : ok ? iconCheck() : iconCross();
+    var cls = "pa-btn pa-config-btn";
+    if (!checked) cls += " pa-config-unknown";
+    else if (ok) cls += " pa-config-ok";
+    else cls += " pa-config-bad";
+    var icon = !checked ? "" : ok ? iconCheck() : iconCross();
     var title = !checked
-      ? 'Configuration not checked yet'
+      ? "Configuration not checked yet"
       : ok
-        ? 'Configuration looks valid'
-        : 'Configuration has issues';
+        ? "Configuration looks valid"
+        : "Configuration has issues";
     return (
       '<button type="button" class="' +
       cls +
@@ -1182,30 +1243,30 @@
       escapeHtml(title) +
       '">' +
       icon +
-      '<span>Configuration</span></button>'
+      "<span>Configuration</span></button>"
     );
   }
 
   function commonPropertiesSeed() {
     return [
       {
-        label: 'Title',
-        name: 'title',
-        type: 'text',
+        label: "Title",
+        name: "title",
+        type: "text",
         isCommonProperty: true,
         prioritySorting: false,
       },
       {
-        label: 'Date added',
-        name: 'creationDate',
-        type: 'date',
+        label: "Date added",
+        name: "creationDate",
+        type: "date",
         isCommonProperty: true,
         prioritySorting: false,
       },
       {
-        label: 'Date modified',
-        name: 'editDate',
-        type: 'date',
+        label: "Date modified",
+        name: "editDate",
+        type: "date",
         isCommonProperty: true,
         prioritySorting: false,
       },
@@ -1221,11 +1282,11 @@
       showInCard: false,
       filter: !!want.filter,
     };
-    if (want.type === 'select') {
+    if (want.type === "select") {
       var th = expectedThesaurusId(want);
       if (th) p.content = th;
     }
-    if (want.type === 'relationship') {
+    if (want.type === "relationship") {
       var content = expectedContentId(want);
       var rel = expectedRelationTypeId(want);
       if (content) p.content = content;
@@ -1236,11 +1297,11 @@
 
   function applyPropertyWiring(existingProp, want) {
     var next = Object.assign({}, existingProp);
-    if (want.type === 'select') {
+    if (want.type === "select") {
       var th = expectedThesaurusId(want);
       if (th) next.content = th;
     }
-    if (want.type === 'relationship') {
+    if (want.type === "relationship") {
       var content = expectedContentId(want);
       var rel = expectedRelationTypeId(want);
       if (content) next.content = content;
@@ -1253,26 +1314,29 @@
     return next;
   }
 
-
   /* ---------- views ---------- */
 
   function renderList() {
     var head =
       '<h1 class="pa-heading">Polls admin</h1>' +
       '<p class="pa-sub">Create and structure polls. Player stays on the separate poll page.</p>';
-    var html = '';
+    var html = "";
     html += '<div class="pa-toolbar">';
-    html += '<button type="button" class="pa-btn primary" id="pa-new-poll">New poll</button>';
-    html += '<button type="button" class="pa-btn" id="pa-import">Import</button>';
+    html +=
+      '<button type="button" class="pa-btn primary" id="pa-new-poll">New poll</button>';
+    html +=
+      '<button type="button" class="pa-btn" id="pa-import">Import</button>';
     html += configButtonHtml();
     html += '<span class="spacer"></span>';
-    html += '<button type="button" class="pa-btn" id="pa-refresh">Refresh</button>';
-    html += '</div>';
+    html +=
+      '<button type="button" class="pa-btn" id="pa-refresh">Refresh</button>';
+    html += "</div>";
     html += errorHtml();
     html += toastHtml();
 
     if (!state.polls.length) {
-      html += '<p class="pa-muted">No polls yet. Create one to get started.</p>';
+      html +=
+        '<p class="pa-muted">No polls yet. Create one to get started.</p>';
     } else {
       html +=
         '<table class="pa-table"><thead><tr><th>Title</th><th>Status</th><th>Id</th><th></th></tr></thead><tbody>';
@@ -1281,51 +1345,63 @@
           '<tr><td><button type="button" class="pa-link pa-open-poll" data-id="' +
           escapeHtml(p.sharedId) +
           '">' +
-          escapeHtml(p.title || '(untitled)') +
-          '</button></td><td>' +
+          escapeHtml(p.title || "(untitled)") +
+          "</button></td><td>" +
           statusPill(p) +
-          '</td><td><code>' +
+          "</td><td><code>" +
           escapeHtml(p.sharedId) +
           '</code></td><td class="pa-row-actions">' +
-          listIconButton('pa-structure', p.sharedId, 'Structure', LIST_ICONS.structure) +
-          listIconButton('pa-sessions', p.sharedId, 'Sessions', LIST_ICONS.sessions) +
-          listIconButton('pa-export', p.sharedId, 'Export', LIST_ICONS.export) +
-          listIconButton(
-            'pa-btn-danger pa-delete-poll',
-            p.sharedId,
-            'Delete',
-            LIST_ICONS.trash
-          ) +
-          '</td></tr>';
+          pollListActionsMenuHtml(p.sharedId) +
+          "</td></tr>";
       });
-      html += '</tbody></table>';
+      html += "</tbody></table>";
     }
     html = appendActiveModal(html);
     // Docs sit outside the card, right-aligned (see #pa-page-foot).
-    renderShell(html, head, docsLinkHtml('Documentation'));
+    renderShell(html, head, docsLinkHtml("Documentation"));
     bindList();
     bindActiveModal();
   }
 
+  function closeActionsMenus(except) {
+    var menus = cardEl.querySelectorAll(".pa-actions-menu[open]");
+    for (var m = 0; m < menus.length; m++) {
+      if (except && menus[m] === except) continue;
+      menus[m].removeAttribute("open");
+    }
+  }
+
+  function bindActionsMenus() {
+    var menus = cardEl.querySelectorAll(".pa-actions-menu");
+    for (var i = 0; i < menus.length; i++) {
+      menus[i].addEventListener("toggle", function (ev) {
+        if (ev.currentTarget.open) {
+          closeActionsMenus(ev.currentTarget);
+        }
+      });
+    }
+  }
+
   function bindList() {
-    var neu = document.getElementById('pa-new-poll');
+    bindActionsMenus();
+    var neu = document.getElementById("pa-new-poll");
     if (neu)
-      neu.addEventListener('click', function () {
+      neu.addEventListener("click", function () {
         state.editingPoll = { _new: true };
-        state.modal = 'poll';
+        state.modal = "poll";
         state.modalError = null;
         state.error = null;
         renderList();
       });
-    var ref = document.getElementById('pa-refresh');
+    var ref = document.getElementById("pa-refresh");
     if (ref)
-      ref.addEventListener('click', function () {
+      ref.addEventListener("click", function () {
         bootList();
       });
-    var imp = document.getElementById('pa-import');
+    var imp = document.getElementById("pa-import");
     if (imp)
-      imp.addEventListener('click', function () {
-        state.modal = 'import';
+      imp.addEventListener("click", function () {
+        state.modal = "import";
         state.modalError = null;
         state.importPreview = null;
         state.importPreviewOpen = false;
@@ -1333,27 +1409,27 @@
         state.error = null;
         renderList();
       });
-    var toastGo = document.getElementById('pa-toast-structure');
+    var toastGo = document.getElementById("pa-toast-structure");
     if (toastGo)
-      toastGo.addEventListener('click', async function () {
-        var id = toastGo.getAttribute('data-id');
+      toastGo.addEventListener("click", async function () {
+        var id = toastGo.getAttribute("data-id");
         state.toast = null;
-        if (id) await openPoll(id, 'structure');
+        if (id) await openPoll(id, "structure");
       });
-    var toastDismiss = document.getElementById('pa-toast-dismiss');
+    var toastDismiss = document.getElementById("pa-toast-dismiss");
     if (toastDismiss)
-      toastDismiss.addEventListener('click', function () {
+      toastDismiss.addEventListener("click", function () {
         state.toast = null;
         renderList();
       });
-    var cfg = document.getElementById('pa-config-btn');
+    var cfg = document.getElementById("pa-config-btn");
     if (cfg)
-      cfg.addEventListener('click', async function () {
+      cfg.addEventListener("click", async function () {
         setBusy(true);
         try {
           await loadConfigDeps();
           buildConfigReports();
-          state.modal = 'config';
+          state.modal = "config";
           state.modalError = null;
           renderList();
         } catch (e) {
@@ -1363,41 +1439,46 @@
           setBusy(false);
         }
       });
-    var opens = cardEl.querySelectorAll('.pa-open-poll');
+    var opens = cardEl.querySelectorAll(".pa-open-poll");
     for (var i = 0; i < opens.length; i++) {
-      opens[i].addEventListener('click', function (ev) {
-        openPollSettings(ev.currentTarget.getAttribute('data-id'));
+      opens[i].addEventListener("click", function (ev) {
+        openPollSettings(ev.currentTarget.getAttribute("data-id"));
       });
     }
-    var structs = cardEl.querySelectorAll('.pa-structure');
+    var structs = cardEl.querySelectorAll(".pa-structure");
     for (var j = 0; j < structs.length; j++) {
-      structs[j].addEventListener('click', function (ev) {
-        openPoll(ev.currentTarget.getAttribute('data-id'), 'structure');
+      structs[j].addEventListener("click", function (ev) {
+        closeActionsMenus();
+        openPoll(ev.currentTarget.getAttribute("data-id"), "structure");
       });
     }
-    var sess = cardEl.querySelectorAll('.pa-sessions');
+    var sess = cardEl.querySelectorAll(".pa-sessions");
     for (var s = 0; s < sess.length; s++) {
-      sess[s].addEventListener('click', function (ev) {
-        openPoll(ev.currentTarget.getAttribute('data-id'), 'sessions');
+      sess[s].addEventListener("click", function (ev) {
+        closeActionsMenus();
+        openPoll(ev.currentTarget.getAttribute("data-id"), "sessions");
       });
     }
-    var exp = cardEl.querySelectorAll('.pa-export');
+    var exp = cardEl.querySelectorAll(".pa-export");
     for (var e = 0; e < exp.length; e++) {
-      exp[e].addEventListener('click', function (ev) {
-        exportPollAsSmJson(ev.currentTarget.getAttribute('data-id'));
+      exp[e].addEventListener("click", function (ev) {
+        closeActionsMenus();
+        exportPollAsSmJson(ev.currentTarget.getAttribute("data-id"));
       });
     }
-    var dels = cardEl.querySelectorAll('.pa-delete-poll');
+    var dels = cardEl.querySelectorAll(".pa-delete-poll");
     for (var d = 0; d < dels.length; d++) {
-      dels[d].addEventListener('click', function (ev) {
-        openDeletePollModal(ev.currentTarget.getAttribute('data-id'));
+      dels[d].addEventListener("click", function (ev) {
+        closeActionsMenus();
+        openDeletePollModal(ev.currentTarget.getAttribute("data-id"));
       });
     }
   }
 
   function clearDragMarks() {
-    var marked = cardEl.querySelectorAll('.pa-drag-over');
-    for (var m = 0; m < marked.length; m++) marked[m].classList.remove('pa-drag-over');
+    var marked = cardEl.querySelectorAll(".pa-drag-over");
+    for (var m = 0; m < marked.length; m++)
+      marked[m].classList.remove("pa-drag-over");
   }
 
   function closeModal() {
@@ -1412,12 +1493,15 @@
   }
 
   function optionLabelOf(entityOrMeta) {
-    if (!entityOrMeta) return '';
+    if (!entityOrMeta) return "";
     if (entityOrMeta.label && !entityOrMeta.metadata) {
-      return String(entityOrMeta.label || entityOrMeta.value || '');
+      return String(entityOrMeta.label || entityOrMeta.value || "");
     }
     return String(
-      metaVal(entityOrMeta, 'poll_label') || entityOrMeta.title || entityOrMeta.value || ''
+      metaVal(entityOrMeta, "poll_label") ||
+        entityOrMeta.title ||
+        entityOrMeta.value ||
+        "",
     );
   }
 
@@ -1445,7 +1529,8 @@
 
   function typeNeedsPrompt(typeId) {
     return (
-      typeId === CONFIG.qType.choice_and_text || typeId === CONFIG.qType.free_text
+      typeId === CONFIG.qType.choice_and_text ||
+      typeId === CONFIG.qType.free_text
     );
   }
 
@@ -1469,51 +1554,54 @@
       state.optionDraft = [];
       return;
     }
-    state.optionDraft = metaList(q, 'poll_available_options').map(function (o) {
+    state.optionDraft = metaList(q, "poll_available_options").map(function (o) {
       return { value: o.value, label: o.label || o.value };
     });
   }
 
   function appendActiveModal(html) {
-    if (state.modal === 'poll') html += renderPollModalHtml();
-    if (state.modal === 'section') html += renderSectionModalHtml();
-    if (state.modal === 'question') html += renderQuestionModalHtml();
-    if (state.modal === 'session') html += renderSessionModalHtml();
-    if (state.modal === 'config') html += renderConfigModalHtml();
-    if (state.modal === 'import') html += renderImportModalHtml();
-    if (state.modal === 'delete-poll') html += renderDeletePollModalHtml();
+    if (state.modal === "poll") html += renderPollModalHtml();
+    if (state.modal === "section") html += renderSectionModalHtml();
+    if (state.modal === "question") html += renderQuestionModalHtml();
+    if (state.modal === "session") html += renderSessionModalHtml();
+    if (state.modal === "config") html += renderConfigModalHtml();
+    if (state.modal === "import") html += renderImportModalHtml();
+    if (state.modal === "delete-poll") html += renderDeletePollModalHtml();
     return html;
   }
 
   function bindActiveModal() {
-    if (state.modal === 'poll') bindPollModal();
-    if (state.modal === 'section') bindSectionModal();
-    if (state.modal === 'question') bindQuestionModal();
-    if (state.modal === 'session') bindSessionModal();
-    if (state.modal === 'config') bindConfigModal();
-    if (state.modal === 'import') bindImportModal();
-    if (state.modal === 'delete-poll') bindDeletePollModal();
+    if (state.modal === "poll") bindPollModal();
+    if (state.modal === "section") bindSectionModal();
+    if (state.modal === "question") bindQuestionModal();
+    if (state.modal === "session") bindSessionModal();
+    if (state.modal === "config") bindConfigModal();
+    if (state.modal === "import") bindImportModal();
+    if (state.modal === "delete-poll") bindDeletePollModal();
   }
 
   function modalErrorHtml() {
     return state.modalError
-      ? '<p class="pa-error">' + escapeHtml(state.modalError) + '</p>'
-      : '';
+      ? '<p class="pa-error">' + escapeHtml(state.modalError) + "</p>"
+      : "";
   }
 
   function renderStructure() {
     var p = state.poll;
     var head =
       '<h1 class="pa-heading">Structure — ' +
-      escapeHtml(p.title || '') +
-      '</h1>' +
+      escapeHtml(p.title || "") +
+      "</h1>" +
       '<p class="pa-sub">Drag sections to reorder. Drag questions within or across sections (drop on a row to swap/move). Numbers update automatically.</p>';
-    var html = '';
+    var html = "";
     html += '<div class="pa-toolbar">';
-    html += '<button type="button" class="pa-btn" id="pa-back">Back to list</button>';
-    html += '<button type="button" class="pa-btn" id="pa-edit-poll">Poll settings</button>';
-    html += '<button type="button" class="pa-btn primary" id="pa-add-section">Add section</button>';
-    html += '</div>';
+    html +=
+      '<button type="button" class="pa-btn" id="pa-back">Back to list</button>';
+    html +=
+      '<button type="button" class="pa-btn" id="pa-edit-poll">Poll settings</button>';
+    html +=
+      '<button type="button" class="pa-btn primary" id="pa-add-section">Add section</button>';
+    html += "</div>";
     html += errorHtml();
 
     if (!state.sections.length) {
@@ -1523,7 +1611,9 @@
       state.sections.forEach(function (sec, sIdx) {
         var qs = questionsForSection(sec.sharedId);
         html +=
-          '<section class="pa-section-block" data-id="' + escapeHtml(sec.sharedId) + '">';
+          '<section class="pa-section-block" data-id="' +
+          escapeHtml(sec.sharedId) +
+          '">';
         html += '<div class="pa-section-head">';
         html +=
           '<span class="pa-drag pa-sec-drag" title="Drag to reorder section" aria-hidden="true">⋮⋮</span>';
@@ -1531,10 +1621,10 @@
           '<button type="button" class="pa-link pa-edit-sec" data-id="' +
           escapeHtml(sec.sharedId) +
           '">Section ' +
-          escapeHtml(metaVal(sec, 'poll_number') || sIdx + 1) +
-          ' — ' +
-          escapeHtml(sec.title || '') +
-          '</button>';
+          escapeHtml(metaVal(sec, "poll_number") || sIdx + 1) +
+          " — " +
+          escapeHtml(sec.title || "") +
+          "</button>";
         html +=
           '<button type="button" class="pa-btn pa-add-q" data-section="' +
           escapeHtml(sec.sharedId) +
@@ -1547,9 +1637,11 @@
           '<button type="button" class="pa-btn pa-btn-danger pa-del-sec" data-id="' +
           escapeHtml(sec.sharedId) +
           '" title="Delete section and its questions">Delete</button>';
-        html += '</div>';
+        html += "</div>";
         html +=
-          '<ul class="pa-qlist" data-section="' + escapeHtml(sec.sharedId) + '">';
+          '<ul class="pa-qlist" data-section="' +
+          escapeHtml(sec.sharedId) +
+          '">';
         if (!qs.length) {
           html +=
             '<li class="pa-qdrop-empty" data-empty="1">Drop questions here</li>';
@@ -1562,34 +1654,37 @@
               '<span class="pa-drag" title="Drag to reorder / move" aria-hidden="true">⋮⋮</span>';
             html +=
               '<span class="pa-qmeta">' +
-              (typ === 'instructions' || typ === 'Section / instructions'
-                ? 'Info'
-                : 'Q' + (metaVal(q, 'poll_number') || '')) +
-              '</span>';
+              (typ === "instructions" || typ === "Section / instructions"
+                ? "Info"
+                : "Q" + (metaVal(q, "poll_number") || "")) +
+              "</span>";
             html +=
               '<button type="button" class="pa-link pa-qlabel pa-edit-q" data-id="' +
               escapeHtml(q.sharedId) +
               '">' +
               escapeHtml(shortText(q)) +
-              '</button>';
+              "</button>";
             if (questionIsRequired(q)) {
               html +=
                 '<span class="pa-q-required" title="Required question">Required</span>';
-            } else if (typ !== 'instructions' && typ !== 'Section / instructions') {
+            } else if (
+              typ !== "instructions" &&
+              typ !== "Section / instructions"
+            ) {
               html +=
                 '<span class="pa-q-optional" title="Optional question">Optional</span>';
             }
-            html += '<span class="pa-qtype">' + escapeHtml(typ) + '</span>';
+            html += '<span class="pa-qtype">' + escapeHtml(typ) + "</span>";
             html +=
               '<button type="button" class="pa-btn pa-btn-danger pa-del-q" data-id="' +
               escapeHtml(q.sharedId) +
               '" title="Delete this item">Delete</button>';
-            html += '</li>';
+            html += "</li>";
           });
         }
-        html += '</ul></section>';
+        html += "</ul></section>";
       });
-      html += '</div>';
+      html += "</div>";
     }
 
     html = appendActiveModal(html);
@@ -1600,73 +1695,77 @@
   }
 
   function bindStructure() {
-    document.getElementById('pa-back').addEventListener('click', function () {
+    document.getElementById("pa-back").addEventListener("click", function () {
       closeModal();
-      state.view = 'list';
+      state.view = "list";
       bootList();
     });
-    document.getElementById('pa-edit-poll').addEventListener('click', function () {
-      state.editingPoll = state.poll;
-      state.modal = 'poll';
-      state.modalError = null;
-      renderStructure();
-    });
-    document.getElementById('pa-add-section').addEventListener('click', function () {
-      state.editingSection = { _new: true };
-      state.modal = 'section';
-      state.modalError = null;
-      renderStructure();
-    });
+    document
+      .getElementById("pa-edit-poll")
+      .addEventListener("click", function () {
+        state.editingPoll = state.poll;
+        state.modal = "poll";
+        state.modalError = null;
+        renderStructure();
+      });
+    document
+      .getElementById("pa-add-section")
+      .addEventListener("click", function () {
+        state.editingSection = { _new: true };
+        state.modal = "section";
+        state.modalError = null;
+        renderStructure();
+      });
 
-    var editSecs = cardEl.querySelectorAll('.pa-edit-sec');
+    var editSecs = cardEl.querySelectorAll(".pa-edit-sec");
     for (var s = 0; s < editSecs.length; s++) {
-      editSecs[s].addEventListener('click', function (ev) {
-        var id = ev.currentTarget.getAttribute('data-id');
+      editSecs[s].addEventListener("click", function (ev) {
+        var id = ev.currentTarget.getAttribute("data-id");
         var sec = state.sections.find(function (x) {
           return x.sharedId === id;
         });
         if (!sec) return;
         state.editingSection = sec;
-        state.modal = 'section';
+        state.modal = "section";
         state.modalError = null;
         renderStructure();
       });
     }
 
-    var addQs = cardEl.querySelectorAll('.pa-add-q');
+    var addQs = cardEl.querySelectorAll(".pa-add-q");
     for (var i = 0; i < addQs.length; i++) {
-      addQs[i].addEventListener('click', function (ev) {
-        openNewQuestion(ev.currentTarget.getAttribute('data-section'), false);
+      addQs[i].addEventListener("click", function (ev) {
+        openNewQuestion(ev.currentTarget.getAttribute("data-section"), false);
       });
     }
-    var addGs = cardEl.querySelectorAll('.pa-add-guide');
+    var addGs = cardEl.querySelectorAll(".pa-add-guide");
     for (var g = 0; g < addGs.length; g++) {
-      addGs[g].addEventListener('click', function (ev) {
-        openNewQuestion(ev.currentTarget.getAttribute('data-section'), true);
+      addGs[g].addEventListener("click", function (ev) {
+        openNewQuestion(ev.currentTarget.getAttribute("data-section"), true);
       });
     }
-    var edits = cardEl.querySelectorAll('.pa-edit-q');
+    var edits = cardEl.querySelectorAll(".pa-edit-q");
     for (var e = 0; e < edits.length; e++) {
-      edits[e].addEventListener('click', function (ev) {
-        var id = ev.currentTarget.getAttribute('data-id');
+      edits[e].addEventListener("click", function (ev) {
+        var id = ev.currentTarget.getAttribute("data-id");
         var q = state.questions.find(function (x) {
           return x.sharedId === id;
         });
         if (!q) return;
         state.editingQuestion = q;
         initOptionDraftFromQuestion(q);
-        state.modal = 'question';
+        state.modal = "question";
         state.modalError = null;
         renderStructure();
       });
     }
 
-    var delQs = cardEl.querySelectorAll('.pa-del-q');
+    var delQs = cardEl.querySelectorAll(".pa-del-q");
     for (var dq = 0; dq < delQs.length; dq++) {
-      delQs[dq].addEventListener('click', async function (ev) {
+      delQs[dq].addEventListener("click", async function (ev) {
         ev.preventDefault();
         ev.stopPropagation();
-        var id = ev.currentTarget.getAttribute('data-id');
+        var id = ev.currentTarget.getAttribute("data-id");
         if (!id) return;
         var q = state.questions.find(function (x) {
           return x.sharedId === id;
@@ -1676,7 +1775,7 @@
           !window.confirm(
             'Delete this question or instructions?\n\n"' +
               label +
-              '"\n\nRemaining items in the section will be renumbered.'
+              '"\n\nRemaining items in the section will be renumbered.',
           )
         ) {
           return;
@@ -1684,25 +1783,25 @@
         await deleteQuestion(id);
       });
     }
-    var delSecs = cardEl.querySelectorAll('.pa-del-sec');
+    var delSecs = cardEl.querySelectorAll(".pa-del-sec");
     for (var ds = 0; ds < delSecs.length; ds++) {
-      delSecs[ds].addEventListener('click', async function (ev) {
+      delSecs[ds].addEventListener("click", async function (ev) {
         ev.preventDefault();
         ev.stopPropagation();
-        var id = ev.currentTarget.getAttribute('data-id');
+        var id = ev.currentTarget.getAttribute("data-id");
         if (!id) return;
         var sec = state.sections.find(function (x) {
           return x.sharedId === id;
         });
         var qs = questionsForSection(id);
-        var title = sec ? sec.title || 'Section' : 'Section';
+        var title = sec ? sec.title || "Section" : "Section";
         if (
           !window.confirm(
             'Delete section "' +
               title +
               '" and its ' +
               qs.length +
-              ' question(s)/instructions?\n\nRemaining sections will be renumbered.'
+              " question(s)/instructions?\n\nRemaining sections will be renumbered.",
           )
         ) {
           return;
@@ -1712,22 +1811,23 @@
     }
 
     bindSectionsDrag();
-    var lists = cardEl.querySelectorAll('.pa-qlist');
+    var lists = cardEl.querySelectorAll(".pa-qlist");
     for (var l = 0; l < lists.length; l++) bindQuestionDrag(lists[l]);
   }
 
   function sectionDragActive() {
-    return !!document.querySelector('.pa-section-block.pa-dragging');
+    return !!document.querySelector(".pa-section-block.pa-dragging");
   }
 
   /** Swap two sections in DOM order and persist poll_number. */
   function swapSections(fromId, toId) {
     if (!fromId || !toId || fromId === toId) return;
-    var container = document.getElementById('pa-sections');
+    var container = document.getElementById("pa-sections");
     if (!container) return;
     var ids = [];
-    var nodes = container.querySelectorAll('.pa-section-block');
-    for (var n = 0; n < nodes.length; n++) ids.push(nodes[n].getAttribute('data-id'));
+    var nodes = container.querySelectorAll(".pa-section-block");
+    for (var n = 0; n < nodes.length; n++)
+      ids.push(nodes[n].getAttribute("data-id"));
     var fromIdx = ids.indexOf(fromId);
     var toIdx = ids.indexOf(toId);
     if (fromIdx < 0 || toIdx < 0) return;
@@ -1744,10 +1844,10 @@
   function bindHandleAsDraggable(host, handleSelector, onStart, onEnd) {
     var handle = host.querySelector(handleSelector);
     if (!handle) return;
-    handle.setAttribute('draggable', 'true');
-    handle.addEventListener('dragstart', function (ev) {
-      host.classList.add('pa-dragging');
-      ev.dataTransfer.effectAllowed = 'move';
+    handle.setAttribute("draggable", "true");
+    handle.addEventListener("dragstart", function (ev) {
+      host.classList.add("pa-dragging");
+      ev.dataTransfer.effectAllowed = "move";
       onStart(ev);
       try {
         ev.dataTransfer.setDragImage(host, 16, 16);
@@ -1755,8 +1855,8 @@
         /* ignore — not all browsers support setDragImage */
       }
     });
-    handle.addEventListener('dragend', function () {
-      host.classList.remove('pa-dragging');
+    handle.addEventListener("dragend", function () {
+      host.classList.remove("pa-dragging");
       host.draggable = false;
       clearDragMarks();
       if (onEnd) onEnd();
@@ -1764,98 +1864,102 @@
   }
 
   function bindSectionsDrag() {
-    var container = document.getElementById('pa-sections');
+    var container = document.getElementById("pa-sections");
     if (!container) return;
-    var blocks = container.querySelectorAll('.pa-section-block');
+    var blocks = container.querySelectorAll(".pa-section-block");
     for (var i = 0; i < blocks.length; i++) {
       (function (block) {
-        bindHandleAsDraggable(block, '.pa-sec-drag', function (ev) {
+        bindHandleAsDraggable(block, ".pa-sec-drag", function (ev) {
           ev.dataTransfer.setData(
-            'text/plain',
-            'sec:' + block.getAttribute('data-id')
+            "text/plain",
+            "sec:" + block.getAttribute("data-id"),
           );
         });
-        block.addEventListener('dragover', function (ev) {
+        block.addEventListener("dragover", function (ev) {
           if (!sectionDragActive()) return;
           ev.preventDefault();
-          ev.dataTransfer.dropEffect = 'move';
+          ev.dataTransfer.dropEffect = "move";
           clearDragMarks();
-          block.classList.add('pa-drag-over');
+          block.classList.add("pa-drag-over");
         });
-        block.addEventListener('drop', function (ev) {
+        block.addEventListener("drop", function (ev) {
           ev.preventDefault();
-          var raw = ev.dataTransfer.getData('text/plain') || '';
+          var raw = ev.dataTransfer.getData("text/plain") || "";
           clearDragMarks();
-          if (raw.indexOf('sec:') !== 0) return;
-          swapSections(raw.slice(4), block.getAttribute('data-id'));
+          if (raw.indexOf("sec:") !== 0) return;
+          swapSections(raw.slice(4), block.getAttribute("data-id"));
         });
       })(blocks[i]);
     }
   }
 
   function bindQuestionDrag(ul) {
-    var sectionId = ul.getAttribute('data-section');
+    var sectionId = ul.getAttribute("data-section");
 
-    ul.addEventListener('dragover', function (ev) {
+    ul.addEventListener("dragover", function (ev) {
       if (sectionDragActive()) {
         // Allow dropping a section onto the question list area.
         ev.preventDefault();
-        ev.dataTransfer.dropEffect = 'move';
+        ev.dataTransfer.dropEffect = "move";
         clearDragMarks();
-        var block = ul.closest('.pa-section-block');
-        if (block) block.classList.add('pa-drag-over');
+        var block = ul.closest(".pa-section-block");
+        if (block) block.classList.add("pa-drag-over");
         return;
       }
       ev.preventDefault();
-      ev.dataTransfer.dropEffect = 'move';
+      ev.dataTransfer.dropEffect = "move";
       clearDragMarks();
-      ul.classList.add('pa-drag-over');
+      ul.classList.add("pa-drag-over");
     });
-    ul.addEventListener('drop', function (ev) {
-      if (ev.target.closest && ev.target.closest('.pa-qitem') && !ev.target.closest('[data-empty]')) {
+    ul.addEventListener("drop", function (ev) {
+      if (
+        ev.target.closest &&
+        ev.target.closest(".pa-qitem") &&
+        !ev.target.closest("[data-empty]")
+      ) {
         return; // item handler will take it
       }
       ev.preventDefault();
-      var fromId = ev.dataTransfer.getData('text/plain') || '';
+      var fromId = ev.dataTransfer.getData("text/plain") || "";
       clearDragMarks();
       if (!fromId) return;
-      if (fromId.indexOf('sec:') === 0) {
+      if (fromId.indexOf("sec:") === 0) {
         swapSections(fromId.slice(4), sectionId);
         return;
       }
       handleQuestionDrop(fromId, sectionId, null);
     });
 
-    var items = ul.querySelectorAll('.pa-qitem');
+    var items = ul.querySelectorAll(".pa-qitem");
     for (var i = 0; i < items.length; i++) {
       (function (li) {
-        bindHandleAsDraggable(li, '.pa-drag', function (ev) {
-          ev.dataTransfer.setData('text/plain', li.getAttribute('data-id'));
+        bindHandleAsDraggable(li, ".pa-drag", function (ev) {
+          ev.dataTransfer.setData("text/plain", li.getAttribute("data-id"));
         });
-        li.addEventListener('dragover', function (ev) {
+        li.addEventListener("dragover", function (ev) {
           if (sectionDragActive()) {
             ev.preventDefault();
-            ev.dataTransfer.dropEffect = 'move';
+            ev.dataTransfer.dropEffect = "move";
             clearDragMarks();
-            var block = li.closest('.pa-section-block');
-            if (block) block.classList.add('pa-drag-over');
+            var block = li.closest(".pa-section-block");
+            if (block) block.classList.add("pa-drag-over");
             return;
           }
           ev.preventDefault();
           ev.stopPropagation();
-          ev.dataTransfer.dropEffect = 'move';
+          ev.dataTransfer.dropEffect = "move";
           clearDragMarks();
-          li.classList.add('pa-drag-over');
+          li.classList.add("pa-drag-over");
         });
-        li.addEventListener('drop', function (ev) {
+        li.addEventListener("drop", function (ev) {
           ev.preventDefault();
           ev.stopPropagation();
-          var fromId = ev.dataTransfer.getData('text/plain') || '';
-          var toId = li.getAttribute('data-id');
+          var fromId = ev.dataTransfer.getData("text/plain") || "";
+          var toId = li.getAttribute("data-id");
           clearDragMarks();
           if (!fromId) return;
           // Forward section drops that land on a question row (most of the hit area).
-          if (fromId.indexOf('sec:') === 0) {
+          if (fromId.indexOf("sec:") === 0) {
             swapSections(fromId.slice(4), sectionId);
             return;
           }
@@ -1871,7 +1975,7 @@
       return x.sharedId === fromId;
     });
     if (!fromQ) return;
-    var fromSection = metaVal(fromQ, 'poll_section');
+    var fromSection = metaVal(fromQ, "poll_section");
 
     if (fromSection === toSectionId) {
       if (!toId) return;
@@ -1919,7 +2023,7 @@
           return x.sharedId === orderedIds[i];
         });
         if (!q) continue;
-        if (Number(metaVal(q, 'poll_number')) === desired) continue;
+        if (Number(metaVal(q, "poll_number")) === desired) continue;
         await saveQuestionPlacement(q, sectionId, desired);
         patchQuestionPlacement(q.sharedId, sectionId, desired);
       }
@@ -1934,7 +2038,13 @@
     }
   }
 
-  async function applyQuestionMove(fromId, fromSection, sourceIds, toSectionId, targetIds) {
+  async function applyQuestionMove(
+    fromId,
+    fromSection,
+    sourceIds,
+    toSectionId,
+    targetIds,
+  ) {
     setBusy(true);
     try {
       for (var t = 0; t < targetIds.length; t++) {
@@ -1944,7 +2054,8 @@
         if (!tq) continue;
         var tNum = t + 1;
         var needs =
-          metaVal(tq, 'poll_section') !== toSectionId || Number(metaVal(tq, 'poll_number')) !== tNum;
+          metaVal(tq, "poll_section") !== toSectionId ||
+          Number(metaVal(tq, "poll_number")) !== tNum;
         if (!needs) continue;
         await saveQuestionPlacement(tq, toSectionId, tNum);
         patchQuestionPlacement(tq.sharedId, toSectionId, tNum);
@@ -1955,7 +2066,7 @@
         });
         if (!sq) continue;
         var sNum = s + 1;
-        if (Number(metaVal(sq, 'poll_number')) === sNum) continue;
+        if (Number(metaVal(sq, "poll_number")) === sNum) continue;
         await saveQuestionPlacement(sq, fromSection, sNum);
         patchQuestionPlacement(sq.sharedId, fromSection, sNum);
       }
@@ -1979,7 +2090,7 @@
           return x.sharedId === orderedIds[i];
         });
         if (!sec) continue;
-        if (Number(metaVal(sec, 'poll_number')) === desired) continue;
+        if (Number(metaVal(sec, "poll_number")) === desired) continue;
         await saveSectionNumber(sec, desired);
         patchSectionNumber(sec.sharedId, desired);
       }
@@ -2015,33 +2126,40 @@
 
   function sortQuestionsLocal() {
     state.questions.sort(function (a, b) {
-      var sa = metaVal(a, 'poll_section') || '';
-      var sb = metaVal(b, 'poll_section') || '';
+      var sa = metaVal(a, "poll_section") || "";
+      var sb = metaVal(b, "poll_section") || "";
       if (sa !== sb) return String(sa).localeCompare(String(sb));
-      return (metaVal(a, 'poll_number') || 0) - (metaVal(b, 'poll_number') || 0);
+      return (
+        (metaVal(a, "poll_number") || 0) - (metaVal(b, "poll_number") || 0)
+      );
     });
   }
 
   function sortSectionsLocal() {
     state.sections.sort(function (a, b) {
-      return (metaVal(a, 'poll_number') || 0) - (metaVal(b, 'poll_number') || 0);
+      return (
+        (metaVal(a, "poll_number") || 0) - (metaVal(b, "poll_number") || 0)
+      );
     });
   }
 
   async function deleteEntityBySharedId(sharedId) {
-    await api('DELETE', '/api/entities?sharedId=' + encodeURIComponent(sharedId));
+    await api(
+      "DELETE",
+      "/api/entities?sharedId=" + encodeURIComponent(sharedId),
+    );
   }
 
   async function bulkDeleteSharedIds(ids) {
     if (!ids || !ids.length) return;
-    await api('POST', '/api/entities/bulkdelete', { sharedIds: ids });
+    await api("POST", "/api/entities/bulkdelete", { sharedIds: ids });
   }
 
   function openDeletePollModal(sharedId) {
     if (!sharedId) return;
     if (!PD) {
       state.error =
-        'Delete helpers missing (PollDelete). Re-publish admin via yarn seed:pages.';
+        "Delete helpers missing (PollDelete). Re-publish admin via yarn seed:pages.";
       renderList();
       return;
     }
@@ -2053,12 +2171,12 @@
       title: (poll && poll.title) || sharedId,
       loading: true,
       plan: null,
-      confirmText: '',
+      confirmText: "",
       running: false,
       progress: null,
       error: null,
     };
-    state.modal = 'delete-poll';
+    state.modal = "delete-poll";
     state.modalError = null;
     state.error = null;
     renderList();
@@ -2075,33 +2193,34 @@
         : [];
 
       var sections = sectionsAll.filter(function (s) {
-        return metaVal(s, 'poll_poll') === pollSharedId;
+        return metaVal(s, "poll_poll") === pollSharedId;
       });
       var questions = questionsAll.filter(function (q) {
-        return metaVal(q, 'poll_poll') === pollSharedId;
+        return metaVal(q, "poll_poll") === pollSharedId;
       });
       var sessions = sessionsAll.filter(function (s) {
-        return metaVal(s, 'poll_poll') === pollSharedId;
+        return metaVal(s, "poll_poll") === pollSharedId;
       });
       var sessionSet = Object.create(null);
       sessions.forEach(function (s) {
         if (s && s.sharedId) sessionSet[s.sharedId] = true;
       });
       var answers = answersAll.filter(function (a) {
-        return sessionSet[metaVal(a, 'poll_session')];
+        return sessionSet[metaVal(a, "poll_session")];
       });
       var answerSet = Object.create(null);
       answers.forEach(function (a) {
         if (a && a.sharedId) answerSet[a.sharedId] = true;
       });
       var otherQuestions = questionsAll.filter(function (q) {
-        return metaVal(q, 'poll_poll') !== pollSharedId;
+        return metaVal(q, "poll_poll") !== pollSharedId;
       });
       var otherAnswers = answersAll.filter(function (a) {
         return a && a.sharedId && !answerSet[a.sharedId];
       });
 
-      if (!state.deletePoll || state.deletePoll.sharedId !== pollSharedId) return;
+      if (!state.deletePoll || state.deletePoll.sharedId !== pollSharedId)
+        return;
       state.deletePoll.plan = PD.planPollDeletion({
         pollSharedId: pollSharedId,
         sections: sections,
@@ -2113,79 +2232,89 @@
       });
       state.deletePoll.loading = false;
       state.deletePoll.error = null;
-      if (state.modal === 'delete-poll') renderList();
+      if (state.modal === "delete-poll") renderList();
     } catch (e) {
-      if (!state.deletePoll || state.deletePoll.sharedId !== pollSharedId) return;
+      if (!state.deletePoll || state.deletePoll.sharedId !== pollSharedId)
+        return;
       state.deletePoll.loading = false;
       state.deletePoll.error = e.message || String(e);
-      if (state.modal === 'delete-poll') renderList();
+      if (state.modal === "delete-poll") renderList();
     }
   }
 
   function renderDeletePollModalHtml() {
     var d = state.deletePoll || {};
-    var phrase = (PD && PD.CONFIRM_PHRASE) || 'DELETE';
+    var phrase = (PD && PD.CONFIRM_PHRASE) || "DELETE";
     var canConfirm =
       !d.loading &&
       !d.running &&
       d.plan &&
       !d.error &&
       PD &&
-      PD.isDeleteConfirmed(d.confirmText || '');
-    var html = '';
+      PD.isDeleteConfirmed(d.confirmText || "");
+    var html = "";
     html += '<div class="pa-modal-backdrop" id="pa-modal-backdrop">';
-    html += '<div class="pa-modal" role="dialog" aria-modal="true" aria-labelledby="pa-delete-title">';
+    html +=
+      '<div class="pa-modal" role="dialog" aria-modal="true" aria-labelledby="pa-delete-title">';
     html += '<h2 id="pa-delete-title">Delete poll</h2>';
     html += '<div class="pa-form">';
     html +=
       '<p class="pa-delete-warning">This permanently deletes <strong>' +
-      escapeHtml(d.title || d.sharedId || '') +
-      '</strong> and related data (answers, sessions, questions, sections, and options not used by other polls). This cannot be undone.</p>';
+      escapeHtml(d.title || d.sharedId || "") +
+      "</strong> and related data (answers, sessions, questions, sections, and options not used by other polls). This cannot be undone.</p>";
 
     if (d.loading) {
       html += '<p class="pa-muted">Scanning related entities…</p>';
     } else if (d.error && !d.running) {
-      html += '<p class="pa-error">' + escapeHtml(d.error) + '</p>';
+      html += '<p class="pa-error">' + escapeHtml(d.error) + "</p>";
     } else if (d.plan) {
       var c = d.plan.counts || {};
       html += '<ul class="pa-delete-counts">';
-      html += '<li>Answers: <strong>' + Number(c.answers || 0) + '</strong></li>';
-      html += '<li>Sessions: <strong>' + Number(c.sessions || 0) + '</strong></li>';
-      html += '<li>Questions: <strong>' + Number(c.questions || 0) + '</strong></li>';
-      html += '<li>Sections: <strong>' + Number(c.sections || 0) + '</strong></li>';
       html +=
-        '<li>Unused options: <strong>' +
+        "<li>Answers: <strong>" + Number(c.answers || 0) + "</strong></li>";
+      html +=
+        "<li>Sessions: <strong>" + Number(c.sessions || 0) + "</strong></li>";
+      html +=
+        "<li>Questions: <strong>" + Number(c.questions || 0) + "</strong></li>";
+      html +=
+        "<li>Sections: <strong>" + Number(c.sections || 0) + "</strong></li>";
+      html +=
+        "<li>Unused options: <strong>" +
         Number(c.options || 0) +
-        '</strong>' +
+        "</strong>" +
         (c.optionsRetained
           ? ' <span class="pa-muted">(' +
             Number(c.optionsRetained) +
-            ' shared options kept)</span>'
-          : '') +
-        '</li>';
-      html += '<li>Poll entity: <strong>1</strong></li>';
+            " shared options kept)</span>"
+          : "") +
+        "</li>";
+      html += "<li>Poll entity: <strong>1</strong></li>";
       html +=
-        '<li>Total entities: <strong>' + Number(c.total || 0) + '</strong></li>';
-      html += '</ul>';
+        "<li>Total entities: <strong>" +
+        Number(c.total || 0) +
+        "</strong></li>";
+      html += "</ul>";
     }
 
     if (d.running || (d.progress && d.progress.total)) {
-      var prog = d.progress || { label: 'Deleting…', done: 0, total: 1 };
-      var pct = prog.total ? Math.min(100, Math.round((100 * prog.done) / prog.total)) : 0;
+      var prog = d.progress || { label: "Deleting…", done: 0, total: 1 };
+      var pct = prog.total
+        ? Math.min(100, Math.round((100 * prog.done) / prog.total))
+        : 0;
       html += '<div class="pa-delete-progress" aria-live="polite">';
       html +=
         '<div class="pa-delete-progress-label">' +
-        escapeHtml(prog.label || 'Deleting…') +
-        ' — ' +
+        escapeHtml(prog.label || "Deleting…") +
+        " — " +
         Number(prog.done || 0) +
-        ' / ' +
+        " / " +
         Number(prog.total || 0) +
-        '</div>';
+        "</div>";
       html +=
         '<div class="pa-delete-progress-track"><div class="pa-delete-progress-fill" style="width:' +
         pct +
         '%"></div></div>';
-      html += '</div>';
+      html += "</div>";
     }
 
     if (!d.running && !d.loading && d.plan && !d.error) {
@@ -2193,30 +2322,30 @@
         '<div class="pa-field"><label for="pa-delete-confirm">Type <code>' +
         escapeHtml(phrase) +
         '</code> to confirm</label><input id="pa-delete-confirm" type="text" autocomplete="off" spellcheck="false" value="' +
-        escapeHtml(d.confirmText || '') +
+        escapeHtml(d.confirmText || "") +
         '" /></div>';
     }
 
     html += '<div class="pa-actions">';
     html +=
       '<button type="button" class="pa-btn" id="pa-cancel-modal"' +
-      (d.running ? ' disabled' : '') +
-      '>Cancel</button>';
+      (d.running ? " disabled" : "") +
+      ">Cancel</button>";
     html +=
       '<button type="button" class="pa-btn pa-btn-danger" id="pa-confirm-delete-poll"' +
-      (canConfirm ? '' : ' disabled') +
-      '>' +
-      (d.running ? 'Deleting…' : 'Delete forever') +
-      '</button>';
-    html += '</div></div></div></div>';
+      (canConfirm ? "" : " disabled") +
+      ">" +
+      (d.running ? "Deleting…" : "Delete forever") +
+      "</button>";
+    html += "</div></div></div></div>";
     return html;
   }
 
   function bindDeletePollModal() {
-    var backdrop = document.getElementById('pa-modal-backdrop');
-    var cancel = document.getElementById('pa-cancel-modal');
-    var confirmBtn = document.getElementById('pa-confirm-delete-poll');
-    var input = document.getElementById('pa-delete-confirm');
+    var backdrop = document.getElementById("pa-modal-backdrop");
+    var cancel = document.getElementById("pa-cancel-modal");
+    var confirmBtn = document.getElementById("pa-confirm-delete-poll");
+    var input = document.getElementById("pa-delete-confirm");
 
     function tryClose() {
       if (state.deletePoll && state.deletePoll.running) return;
@@ -2224,26 +2353,26 @@
       renderList();
     }
 
-    if (cancel) cancel.addEventListener('click', tryClose);
+    if (cancel) cancel.addEventListener("click", tryClose);
     if (backdrop) {
-      backdrop.addEventListener('click', function (ev) {
+      backdrop.addEventListener("click", function (ev) {
         if (ev.target === backdrop) tryClose();
       });
     }
     if (input) {
-      input.addEventListener('input', function () {
+      input.addEventListener("input", function () {
         if (!state.deletePoll) return;
         state.deletePoll.confirmText = input.value;
         if (confirmBtn) {
           confirmBtn.disabled = !(
-            PD && PD.isDeleteConfirmed(state.deletePoll.confirmText || '')
+            PD && PD.isDeleteConfirmed(state.deletePoll.confirmText || "")
           );
         }
       });
       input.focus();
     }
     if (confirmBtn) {
-      confirmBtn.addEventListener('click', async function () {
+      confirmBtn.addEventListener("click", async function () {
         await runDeletePollConfirmed();
       });
     }
@@ -2251,12 +2380,12 @@
 
   async function runDeletePollConfirmed() {
     if (!PD || !state.deletePoll || !state.deletePoll.plan) return;
-    if (!PD.isDeleteConfirmed(state.deletePoll.confirmText || '')) return;
+    if (!PD.isDeleteConfirmed(state.deletePoll.confirmText || "")) return;
     var d = state.deletePoll;
     d.running = true;
     d.error = null;
     d.progress = {
-      label: 'Starting…',
+      label: "Starting…",
       done: 0,
       total: d.plan.counts.total || 1,
     };
@@ -2272,7 +2401,7 @@
             done: ev.done,
             total: ev.total,
           };
-          if (state.modal === 'delete-poll') renderList();
+          if (state.modal === "delete-poll") renderList();
         },
       });
       state.optionsCache = null;
@@ -2288,12 +2417,11 @@
     }
   }
 
-
   async function renumberQuestionsInSection(sectionId) {
     var qs = questionsForSection(sectionId);
     for (var i = 0; i < qs.length; i++) {
       var desired = i + 1;
-      if (Number(metaVal(qs[i], 'poll_number')) === desired) continue;
+      if (Number(metaVal(qs[i], "poll_number")) === desired) continue;
       await saveQuestionPlacement(qs[i], sectionId, desired);
       patchQuestionPlacement(qs[i].sharedId, sectionId, desired);
     }
@@ -2305,7 +2433,7 @@
     for (var i = 0; i < state.sections.length; i++) {
       var desired = i + 1;
       var sec = state.sections[i];
-      if (Number(metaVal(sec, 'poll_number')) === desired) continue;
+      if (Number(metaVal(sec, "poll_number")) === desired) continue;
       await saveSectionNumber(sec, desired);
       patchSectionNumber(sec.sharedId, desired);
     }
@@ -2317,7 +2445,7 @@
       return x.sharedId === sharedId;
     });
     if (!q) return;
-    var sectionId = metaVal(q, 'poll_section');
+    var sectionId = metaVal(q, "poll_section");
     setBusy(true);
     try {
       await deleteEntityBySharedId(sharedId);
@@ -2345,7 +2473,7 @@
       }
       await deleteEntityBySharedId(sharedId);
       state.questions = state.questions.filter(function (x) {
-        return metaVal(x, 'poll_section') !== sharedId;
+        return metaVal(x, "poll_section") !== sharedId;
       });
       state.sections = state.sections.filter(function (x) {
         return x.sharedId !== sharedId;
@@ -2372,13 +2500,13 @@
       title: q.title,
       template: CONFIG.templates.Question,
       published: false,
-      language: 'en',
+      language: "en",
       metadata: Object.assign({}, buildQuestionMetadataFromEntity(q), {
         poll_number: [{ value: Number(number) }],
         poll_section: [{ value: sectionId }],
       }),
     };
-    var saved = await api('POST', '/api/entities', payload);
+    var saved = await api("POST", "/api/entities", payload);
     return saved.entity || saved;
   }
 
@@ -2389,43 +2517,42 @@
       title: sec.title,
       template: CONFIG.templates.Section,
       published: false,
-      language: 'en',
+      language: "en",
       metadata: {
         poll_number: [{ value: Number(number) }],
         poll_poll: [{ value: state.poll.sharedId }],
       },
     };
-    var desc = metaVal(sec, 'poll_description');
+    var desc = metaVal(sec, "poll_description");
     if (desc) payload.metadata.poll_description = [{ value: desc }];
-    var saved = await api('POST', '/api/entities', payload);
+    var saved = await api("POST", "/api/entities", payload);
     return saved.entity || saved;
   }
 
   function buildQuestionMetadataFromEntity(q) {
     var md = {};
     [
-      'poll_question_text',
-      'poll_type',
-      'poll_allow_multiple',
-      'poll_required',
-      'poll_text_prompt',
-      'poll_section',
-      'poll_poll',
-    ].forEach(
-      function (key) {
-        var list = metaList(q, key);
-        if (list.length) md[key] = list.map(function (e) {
+      "poll_question_text",
+      "poll_type",
+      "poll_allow_multiple",
+      "poll_required",
+      "poll_text_prompt",
+      "poll_section",
+      "poll_poll",
+    ].forEach(function (key) {
+      var list = metaList(q, key);
+      if (list.length)
+        md[key] = list.map(function (e) {
           return { value: e.value };
         });
-      }
-    );
-    var opts = metaList(q, 'poll_available_options');
+    });
+    var opts = metaList(q, "poll_available_options");
     if (opts.length) {
       md.poll_available_options = opts.map(function (e) {
         return { value: e.value };
       });
     }
-    var num = metaVal(q, 'poll_number');
+    var num = metaVal(q, "poll_number");
     if (num !== undefined) md.poll_number = [{ value: num }];
     return md;
   }
@@ -2433,100 +2560,106 @@
   function renderPollModalHtml() {
     var p = state.editingPoll;
     var isNew = !!(p && p._new);
-    var html = '';
+    var html = "";
     html += '<div class="pa-modal-backdrop" id="pa-modal-backdrop">';
     html += '<div class="pa-modal" role="dialog" aria-modal="true">';
-    html += '<h2>' + (isNew ? 'New poll' : 'Edit poll') + '</h2>';
+    html += "<h2>" + (isNew ? "New poll" : "Edit poll") + "</h2>";
     html += modalErrorHtml();
     html += '<div class="pa-form">';
     if (!isNew) {
       html +=
         '<p class="pa-muted" style="margin:0"><code>' +
         escapeHtml(p.sharedId) +
-        '</code></p>';
+        "</code></p>";
     }
     html +=
       '<div class="pa-field"><label for="pa-title">Title</label><input id="pa-title" type="text" value="' +
-      escapeHtml(isNew ? '' : p.title || '') +
+      escapeHtml(isNew ? "" : p.title || "") +
       '" /></div>';
     html +=
       '<div class="pa-field"><label for="pa-desc">Description</label><textarea id="pa-desc">' +
-      escapeHtml(isNew ? '' : metaVal(p, 'poll_description') || '') +
-      '</textarea></div>';
+      escapeHtml(isNew ? "" : metaVal(p, "poll_description") || "") +
+      "</textarea></div>";
     if (!isNew) {
-      var st = metaVal(p, 'poll_status') || CONFIG.pollStatus.draft;
-      html += '<div class="pa-field"><label for="pa-status">Status</label><select id="pa-status">';
-      ['draft', 'published', 'closed'].forEach(function (k) {
+      var st = metaVal(p, "poll_status") || CONFIG.pollStatus.draft;
+      html +=
+        '<div class="pa-field"><label for="pa-status">Status</label><select id="pa-status">';
+      ["draft", "published", "closed"].forEach(function (k) {
         html +=
           '<option value="' +
           CONFIG.pollStatus[k] +
           '"' +
-          (st === CONFIG.pollStatus[k] ? ' selected' : '') +
-          '>' +
+          (st === CONFIG.pollStatus[k] ? " selected" : "") +
+          ">" +
           k +
-          '</option>';
+          "</option>";
       });
-      html += '</select></div>';
+      html += "</select></div>";
     }
     html += '<div class="pa-actions">';
-    html += '<button type="button" class="pa-btn" id="pa-cancel-modal">Cancel</button>';
-    if (!isNew && state.view === 'list') {
+    html +=
+      '<button type="button" class="pa-btn" id="pa-cancel-modal">Cancel</button>';
+    if (!isNew && state.view === "list") {
       html +=
         '<button type="button" class="pa-btn" id="pa-to-structure">Structure</button>';
     }
     html +=
       '<button type="button" class="pa-btn primary" id="pa-save-poll">' +
-      (isNew ? 'Create' : 'Save') +
-      '</button>';
-    html += '</div></div></div></div>';
+      (isNew ? "Create" : "Save") +
+      "</button>";
+    html += "</div></div></div></div>";
     return html;
   }
 
   function bindPollModal() {
-    var backdrop = document.getElementById('pa-modal-backdrop');
-    document.getElementById('pa-cancel-modal').addEventListener('click', function () {
-      closeModal();
-      render();
-    });
-    backdrop.addEventListener('click', function (ev) {
+    var backdrop = document.getElementById("pa-modal-backdrop");
+    document
+      .getElementById("pa-cancel-modal")
+      .addEventListener("click", function () {
+        closeModal();
+        render();
+      });
+    backdrop.addEventListener("click", function (ev) {
       if (ev.target === backdrop) {
         closeModal();
         render();
       }
     });
-    var toStruct = document.getElementById('pa-to-structure');
+    var toStruct = document.getElementById("pa-to-structure");
     if (toStruct) {
-      toStruct.addEventListener('click', async function () {
+      toStruct.addEventListener("click", async function () {
         var id = state.editingPoll && state.editingPoll.sharedId;
         closeModal();
-        if (id) await openPoll(id, 'structure');
+        if (id) await openPoll(id, "structure");
       });
     }
-    document.getElementById('pa-save-poll').addEventListener('click', async function () {
-      await savePollModal();
-    });
-    var titleEl = document.getElementById('pa-title');
+    document
+      .getElementById("pa-save-poll")
+      .addEventListener("click", async function () {
+        await savePollModal();
+      });
+    var titleEl = document.getElementById("pa-title");
     if (titleEl) titleEl.focus();
   }
 
   async function savePollModal() {
     var p = state.editingPoll;
     var isNew = !!(p && p._new);
-    var title = (document.getElementById('pa-title').value || '').trim();
-    var desc = (document.getElementById('pa-desc').value || '').trim();
+    var title = (document.getElementById("pa-title").value || "").trim();
+    var desc = (document.getElementById("pa-desc").value || "").trim();
     if (!title) {
-      state.modalError = 'Title is required.';
+      state.modalError = "Title is required.";
       render();
       return;
     }
     setBusy(true);
     try {
       if (isNew) {
-        var saved = await api('POST', '/api/entities', {
+        var saved = await api("POST", "/api/entities", {
           title: title,
           template: CONFIG.templates.Poll,
           published: false,
-          language: 'en',
+          language: "en",
           metadata: {
             poll_description: desc ? [{ value: desc }] : [],
             poll_status: [{ value: CONFIG.pollStatus.draft }],
@@ -2535,19 +2668,19 @@
         var entity = saved.entity || saved;
         closeModal();
         state.error = null;
-        await openPoll(entity.sharedId, 'structure');
+        await openPoll(entity.sharedId, "structure");
       } else {
-        var statusEl = document.getElementById('pa-status');
+        var statusEl = document.getElementById("pa-status");
         var status = statusEl
           ? statusEl.value
-          : metaVal(p, 'poll_status') || CONFIG.pollStatus.draft;
-        var updated = await api('POST', '/api/entities', {
+          : metaVal(p, "poll_status") || CONFIG.pollStatus.draft;
+        var updated = await api("POST", "/api/entities", {
           _id: p._id,
           sharedId: p.sharedId,
           title: title,
           template: CONFIG.templates.Poll,
           published: false,
-          language: 'en',
+          language: "en",
           metadata: {
             poll_description: desc ? [{ value: desc }] : [],
             poll_status: [{ value: status }],
@@ -2576,16 +2709,16 @@
     state.error = null;
     try {
       var poll = await loadEntity(sharedId);
-      if (!poll) throw new Error('Poll not found.');
+      if (!poll) throw new Error("Poll not found.");
       state.poll = poll;
       state.editingPoll = poll;
-      state.modal = 'poll';
+      state.modal = "poll";
       state.modalError = null;
-      state.view = 'list';
+      state.view = "list";
       renderList();
     } catch (e) {
       state.error = e.message || String(e);
-      state.view = 'list';
+      state.view = "list";
       renderList();
     } finally {
       setBusy(false);
@@ -2599,7 +2732,7 @@
       asGuidance: asGuidance,
     };
     state.optionDraft = [];
-    state.modal = 'question';
+    state.modal = "question";
     state.modalError = null;
     renderStructure();
   }
@@ -2609,16 +2742,16 @@
     var isNew = !!(sec && sec._new);
     var displayNum = isNew
       ? state.sections.length + 1
-      : metaVal(sec, 'poll_number') || '';
-    var html = '';
+      : metaVal(sec, "poll_number") || "";
+    var html = "";
     html += '<div class="pa-modal-backdrop" id="pa-modal-backdrop">';
     html += '<div class="pa-modal" role="dialog" aria-modal="true">';
-    html += '<h2>' + (isNew ? 'New section' : 'Edit section') + '</h2>';
+    html += "<h2>" + (isNew ? "New section" : "Edit section") + "</h2>";
     html += modalErrorHtml();
     html += '<div class="pa-form">';
     html +=
       '<div class="pa-field"><label for="pa-sectitle">Title</label><input id="pa-sectitle" type="text" value="' +
-      escapeHtml(isNew ? '' : sec.title || '') +
+      escapeHtml(isNew ? "" : sec.title || "") +
       '" /></div>';
     html +=
       '<div class="pa-field"><label for="pa-secnum">Number</label>' +
@@ -2627,44 +2760,49 @@
       '" disabled />' +
       '<p class="pa-muted" style="margin:0.35rem 0 0">' +
       (isNew
-        ? 'New sections are appended at the end. Reorder with drag-and-drop.'
-        : 'Change order with drag-and-drop on the structure view.') +
-      '</p></div>';
+        ? "New sections are appended at the end. Reorder with drag-and-drop."
+        : "Change order with drag-and-drop on the structure view.") +
+      "</p></div>";
     html += '<div class="pa-actions">';
-    html += '<button type="button" class="pa-btn" id="pa-cancel-modal">Cancel</button>';
+    html +=
+      '<button type="button" class="pa-btn" id="pa-cancel-modal">Cancel</button>';
     html +=
       '<button type="button" class="pa-btn primary" id="pa-save-sec">' +
-      (isNew ? 'Create' : 'Save') +
-      '</button>';
-    html += '</div></div></div></div>';
+      (isNew ? "Create" : "Save") +
+      "</button>";
+    html += "</div></div></div></div>";
     return html;
   }
 
   function bindSectionModal() {
-    var backdrop = document.getElementById('pa-modal-backdrop');
-    document.getElementById('pa-cancel-modal').addEventListener('click', function () {
-      closeModal();
-      renderStructure();
-    });
-    backdrop.addEventListener('click', function (ev) {
+    var backdrop = document.getElementById("pa-modal-backdrop");
+    document
+      .getElementById("pa-cancel-modal")
+      .addEventListener("click", function () {
+        closeModal();
+        renderStructure();
+      });
+    backdrop.addEventListener("click", function (ev) {
       if (ev.target === backdrop) {
         closeModal();
         renderStructure();
       }
     });
-    document.getElementById('pa-save-sec').addEventListener('click', async function () {
-      await saveSectionModal();
-    });
-    var titleEl = document.getElementById('pa-sectitle');
+    document
+      .getElementById("pa-save-sec")
+      .addEventListener("click", async function () {
+        await saveSectionModal();
+      });
+    var titleEl = document.getElementById("pa-sectitle");
     if (titleEl) titleEl.focus();
   }
 
   async function saveSectionModal() {
     var sec = state.editingSection;
     var isNew = !!(sec && sec._new);
-    var title = (document.getElementById('pa-sectitle').value || '').trim();
+    var title = (document.getElementById("pa-sectitle").value || "").trim();
     if (!title) {
-      state.modalError = 'Title is required.';
+      state.modalError = "Title is required.";
       renderStructure();
       return;
     }
@@ -2672,11 +2810,11 @@
     try {
       if (isNew) {
         var nextNum = state.sections.length + 1;
-        var saved = await api('POST', '/api/entities', {
+        var saved = await api("POST", "/api/entities", {
           title: title,
           template: CONFIG.templates.Section,
           published: false,
-          language: 'en',
+          language: "en",
           metadata: {
             poll_number: [{ value: nextNum }],
             poll_poll: [{ value: state.poll.sharedId }],
@@ -2692,15 +2830,15 @@
           title: title,
           template: CONFIG.templates.Section,
           published: false,
-          language: 'en',
+          language: "en",
           metadata: {
-            poll_number: [{ value: Number(metaVal(sec, 'poll_number') || 1) }],
+            poll_number: [{ value: Number(metaVal(sec, "poll_number") || 1) }],
             poll_poll: [{ value: state.poll.sharedId }],
           },
         };
-        var desc = metaVal(sec, 'poll_description');
+        var desc = metaVal(sec, "poll_description");
         if (desc) payload.metadata.poll_description = [{ value: desc }];
-        var updated = await api('POST', '/api/entities', payload);
+        var updated = await api("POST", "/api/entities", payload);
         var ent = updated.entity || updated;
         var idx = state.sections.findIndex(function (x) {
           return x.sharedId === ent.sharedId;
@@ -2724,25 +2862,35 @@
     var isNew = !!(q && q._new);
     var asGuidance = isNew
       ? !!q.asGuidance
-      : qTypeLabel(q) === 'instructions' || metaVal(q, 'poll_type') === CONFIG.qType.instructions;
-    var html = '';
+      : qTypeLabel(q) === "instructions" ||
+        metaVal(q, "poll_type") === CONFIG.qType.instructions;
+    var html = "";
     html += '<div class="pa-modal-backdrop" id="pa-modal-backdrop">';
-    html += '<div class="pa-modal pa-modal-wide" role="dialog" aria-modal="true">';
     html +=
-      '<h2>' +
-      (isNew ? (asGuidance ? 'New instructions' : 'New question') : 'Edit question') +
-      '</h2>';
+      '<div class="pa-modal pa-modal-wide" role="dialog" aria-modal="true">';
+    html +=
+      "<h2>" +
+      (isNew
+        ? asGuidance
+          ? "New instructions"
+          : "New question"
+        : "Edit question") +
+      "</h2>";
     html += modalErrorHtml();
     html += '<div class="pa-form">';
 
-    var sectionIdForNum = isNew ? q.sectionId : metaVal(q, 'poll_section');
+    var sectionIdForNum = isNew ? q.sectionId : metaVal(q, "poll_section");
     var siblingsForNum = questionsForSection(sectionIdForNum);
     var sectionNum = isNew
       ? siblingsForNum.length + 1
-      : metaVal(q, 'poll_number') !== undefined
-        ? metaVal(q, 'poll_number')
+      : metaVal(q, "poll_number") !== undefined
+        ? metaVal(q, "poll_number")
         : siblingsForNum.length;
-    var pollNum = pollQuestionOrdinal(isNew ? null : q.sharedId, sectionIdForNum, isNew);
+    var pollNum = pollQuestionOrdinal(
+      isNew ? null : q.sharedId,
+      sectionIdForNum,
+      isNew,
+    );
     html +=
       '<p class="pa-qnums">' +
       'Number in section <span class="pa-num-badge">' +
@@ -2750,87 +2898,95 @@
       '</span> in poll <span class="pa-num-badge">' +
       escapeHtml(pollNum) +
       '</span> <span class="pa-muted">(assigned automatically)</span>' +
-      '</p>';
+      "</p>";
 
-    var text = isNew ? '' : metaVal(q, 'poll_question_text') || '';
+    var text = isNew ? "" : metaVal(q, "poll_question_text") || "";
     html +=
       '<div class="pa-field"><label for="pa-qtext">Text</label><textarea id="pa-qtext" class="pa-qtext">' +
       escapeHtml(text) +
-      '</textarea></div>';
+      "</textarea></div>";
 
     if (!asGuidance) {
-      var curType = isNew ? CONFIG.qType.choice : metaVal(q, 'poll_type') || CONFIG.qType.choice;
-      html += '<div class="pa-field"><label for="pa-qtype">Type</label><select id="pa-qtype">';
+      var curType = isNew
+        ? CONFIG.qType.choice
+        : metaVal(q, "poll_type") || CONFIG.qType.choice;
+      html +=
+        '<div class="pa-field"><label for="pa-qtype">Type</label><select id="pa-qtype">';
       [
-        ['choice', 'Choice'],
-        ['choice_and_text', 'Choice + other field'],
-        ['free_text', 'Open text'],
-        ['numeric', 'Numeric'],
-        ['date', 'Date'],
-        ['instructions', 'Instructions'],
+        ["choice", "Choice"],
+        ["choice_and_text", "Choice + other field"],
+        ["free_text", "Open text"],
+        ["numeric", "Numeric"],
+        ["date", "Date"],
+        ["instructions", "Instructions"],
       ].forEach(function (pair) {
         html +=
           '<option value="' +
           CONFIG.qType[pair[0]] +
           '"' +
-          (curType === CONFIG.qType[pair[0]] ? ' selected' : '') +
-          '>' +
+          (curType === CONFIG.qType[pair[0]] ? " selected" : "") +
+          ">" +
           pair[1] +
-          '</option>';
+          "</option>";
       });
-      html += '</select></div>';
+      html += "</select></div>";
 
-      var multi = !isNew && metaVal(q, 'poll_allow_multiple') === CONFIG.yesNo.yes;
+      var multi =
+        !isNew && metaVal(q, "poll_allow_multiple") === CONFIG.yesNo.yes;
       var requiredChecked = isNew || questionIsRequired(q);
       html += '<div class="pa-field pa-check-row">';
       html +=
         '<label class="pa-check" id="pa-multi-wrap"' +
-        (typeNeedsMulti(curType) ? '' : ' hidden') +
+        (typeNeedsMulti(curType) ? "" : " hidden") +
         '><input id="pa-multi" type="checkbox"' +
-        (multi ? ' checked' : '') +
-        ' /><span>Allow multiple selections</span></label>';
+        (multi ? " checked" : "") +
+        " /><span>Allow multiple selections</span></label>";
       html +=
         '<label class="pa-check" id="pa-required-wrap">' +
         '<input id="pa-required" type="checkbox"' +
-        (requiredChecked ? ' checked' : '') +
-        ' /><span>Required answer</span>' +
+        (requiredChecked ? " checked" : "") +
+        " /><span>Required answer</span>" +
         '<span class="pa-info-tip" tabindex="0" role="img" ' +
         'title="Optional questions can be skipped; finish is blocked until all required ones are answered." ' +
         'aria-label="Optional questions can be skipped; finish is blocked until all required ones are answered.">i</span>' +
-        '</label>';
-      html += '</div>';
+        "</label>";
+      html += "</div>";
       html +=
         '<div class="pa-field" id="pa-prompt-wrap"' +
-        (typeNeedsPrompt(curType) ? '' : ' hidden') +
+        (typeNeedsPrompt(curType) ? "" : " hidden") +
         '><label for="pa-prompt">Text prompt</label><input id="pa-prompt" type="text" value="' +
-        escapeHtml(isNew ? '' : metaVal(q, 'poll_text_prompt') || '') +
+        escapeHtml(isNew ? "" : metaVal(q, "poll_text_prompt") || "") +
         '" placeholder="Shown with the free-text / other field" /></div>';
     }
 
     if (!asGuidance) {
-      var initialType = isNew ? CONFIG.qType.choice : metaVal(q, 'poll_type') || CONFIG.qType.choice;
+      var initialType = isNew
+        ? CONFIG.qType.choice
+        : metaVal(q, "poll_type") || CONFIG.qType.choice;
       html +=
         '<div id="pa-opts-wrap"' +
-        (typeNeedsOptions(initialType) ? '' : ' hidden') +
-        '>' +
+        (typeNeedsOptions(initialType) ? "" : " hidden") +
+        ">" +
         renderOptionsEditorHtml() +
-        '</div>';
+        "</div>";
     }
 
     html += '<div class="pa-actions">';
-    html += '<button type="button" class="pa-btn" id="pa-cancel-modal">Cancel</button>';
-    html += '<button type="button" class="pa-btn primary" id="pa-save-q">Save</button>';
-    html += '</div></div></div></div>';
+    html +=
+      '<button type="button" class="pa-btn" id="pa-cancel-modal">Cancel</button>';
+    html +=
+      '<button type="button" class="pa-btn primary" id="pa-save-q">Save</button>';
+    html += "</div></div></div></div>";
     return html;
   }
 
   function renderOptionsEditorHtml() {
-    var html = '';
+    var html = "";
     html += '<div class="pa-field" id="pa-opts-editor">';
     html +=
       '<label class="pa-opts-heading">Options <span class="pa-muted">(' +
       state.optionDraft.length +
-      ')</span></label>';
+      ")</span></label>";
 
     html +=
       '<div class="pa-opt-combo">' +
@@ -2838,14 +2994,14 @@
       '<input id="pa-opt-search" type="text" placeholder="Search or create an option…" autocomplete="off" ' +
       'role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="pa-opt-results" />' +
       '<div class="pa-opt-results" id="pa-opt-results" role="listbox" hidden></div>' +
-      '</div>';
+      "</div>";
 
     if (!state.optionDraft.length) {
       html +=
         '<div class="pa-opts-empty" role="status">' +
         '<p class="pa-opts-empty-title">No options yet</p>' +
         '<p class="pa-opts-empty-body">Search above to reuse an existing option, or type a new label and press Enter.</p>' +
-        '</div>';
+        "</div>";
     } else {
       html += '<ul class="pa-optlist" id="pa-optlist">';
       state.optionDraft.forEach(function (o, idx) {
@@ -2858,23 +3014,23 @@
           '<span class="pa-drag" title="Drag to reorder" aria-hidden="true">⋮⋮</span>' +
           '<span class="pa-optlabel">' +
           escapeHtml(o.label || o.value) +
-          '</span>' +
+          "</span>" +
           '<button type="button" class="pa-btn pa-opt-remove" data-id="' +
           escapeHtml(o.value) +
           '" title="Unlink">Remove</button>' +
-          '</li>';
+          "</li>";
       });
-      html += '</ul>';
+      html += "</ul>";
       html +=
         '<p class="pa-muted pa-opts-hint">Drag ⋮⋮ to reorder. Changes save with the question.</p>';
     }
 
-    html += '</div>';
+    html += "</div>";
     return html;
   }
 
   function refreshOptionsEditor() {
-    var wrap = document.getElementById('pa-opts-wrap');
+    var wrap = document.getElementById("pa-opts-wrap");
     if (!wrap) return;
     wrap.innerHTML = renderOptionsEditorHtml();
     bindOptionsEditor();
@@ -2889,7 +3045,7 @@
   }
 
   function findCachedOptionByLabel(label) {
-    var needle = (label || '').trim().toLowerCase();
+    var needle = (label || "").trim().toLowerCase();
     if (!needle || !state.optionsCache) return null;
     for (var i = 0; i < state.optionsCache.length; i++) {
       if (optionLabelOf(state.optionsCache[i]).toLowerCase() === needle) {
@@ -2908,7 +3064,7 @@
   }
 
   async function createOrLinkOption(label) {
-    label = (label || '').trim();
+    label = (label || "").trim();
     if (!label) return;
     try {
       await ensureOptionsCache();
@@ -2925,11 +3081,11 @@
     }
     setBusy(true);
     try {
-      var saved = await api('POST', '/api/entities', {
+      var saved = await api("POST", "/api/entities", {
         title: label,
         template: CONFIG.templates.Option,
         published: false,
-        language: 'en',
+        language: "en",
         metadata: { poll_label: [{ value: label }] },
       });
       var ent = saved.entity || saved;
@@ -2950,13 +3106,13 @@
   }
 
   function bindOptionsEditor() {
-    var list = document.getElementById('pa-optlist');
+    var list = document.getElementById("pa-optlist");
     if (list) bindOptionDraftDrag(list);
 
-    var removes = cardEl.querySelectorAll('.pa-opt-remove');
+    var removes = cardEl.querySelectorAll(".pa-opt-remove");
     for (var r = 0; r < removes.length; r++) {
-      removes[r].addEventListener('click', function (ev) {
-        var id = ev.currentTarget.getAttribute('data-id');
+      removes[r].addEventListener("click", function (ev) {
+        var id = ev.currentTarget.getAttribute("data-id");
         state.optionDraft = state.optionDraft.filter(function (o) {
           return o.value !== id;
         });
@@ -2964,56 +3120,56 @@
       });
     }
 
-    var search = document.getElementById('pa-opt-search');
-    var results = document.getElementById('pa-opt-results');
+    var search = document.getElementById("pa-opt-search");
+    var results = document.getElementById("pa-opt-results");
     if (!search || !results) return;
 
     var activeIndex = -1;
 
     function setExpanded(open) {
-      search.setAttribute('aria-expanded', open ? 'true' : 'false');
+      search.setAttribute("aria-expanded", open ? "true" : "false");
     }
 
     function closeResults() {
       results.hidden = true;
-      results.innerHTML = '';
+      results.innerHTML = "";
       activeIndex = -1;
       setExpanded(false);
     }
 
     function highlightActive() {
-      var buttons = results.querySelectorAll('.pa-opt-pick-btn');
+      var buttons = results.querySelectorAll(".pa-opt-pick-btn");
       for (var i = 0; i < buttons.length; i++) {
         var on = i === activeIndex;
-        buttons[i].classList.toggle('pa-opt-pick-active', on);
-        if (on) buttons[i].setAttribute('aria-selected', 'true');
-        else buttons[i].removeAttribute('aria-selected');
+        buttons[i].classList.toggle("pa-opt-pick-active", on);
+        if (on) buttons[i].setAttribute("aria-selected", "true");
+        else buttons[i].removeAttribute("aria-selected");
       }
       if (activeIndex >= 0 && buttons[activeIndex]) {
-        buttons[activeIndex].scrollIntoView({ block: 'nearest' });
+        buttons[activeIndex].scrollIntoView({ block: "nearest" });
       }
     }
 
     function bindResultButtons() {
-      var picks = results.querySelectorAll('.pa-opt-pick-btn');
+      var picks = results.querySelectorAll(".pa-opt-pick-btn");
       for (var i = 0; i < picks.length; i++) {
-        picks[i].addEventListener('mousedown', function (ev) {
+        picks[i].addEventListener("mousedown", function (ev) {
           // Keep focus on the input so blur does not race the click.
           ev.preventDefault();
         });
-        picks[i].addEventListener('click', function (ev) {
+        picks[i].addEventListener("click", function (ev) {
           var btn = ev.currentTarget;
-          var createLabel = btn.getAttribute('data-create');
+          var createLabel = btn.getAttribute("data-create");
           if (createLabel != null) {
-            search.value = '';
+            search.value = "";
             closeResults();
             createOrLinkOption(createLabel);
             return;
           }
-          var id = btn.getAttribute('data-id');
-          var label = btn.getAttribute('data-label');
+          var id = btn.getAttribute("data-id");
+          var label = btn.getAttribute("data-label");
           linkOptionToDraft(id, label);
-          search.value = '';
+          search.value = "";
           closeResults();
           refreshOptionsEditor();
         });
@@ -3022,7 +3178,7 @@
 
     var runSearch = async function (opts) {
       opts = opts || {};
-      var raw = search.value || '';
+      var raw = search.value || "";
       var q = raw.trim().toLowerCase();
       if (!q && !opts.forceOpen) {
         closeResults();
@@ -3068,22 +3224,22 @@
           escapeHtml(optionLabelOf(row)) +
           '">' +
           escapeHtml(optionLabelOf(row)) +
-          '</button></li>';
+          "</button></li>";
       });
       if (exactLinked) {
         html +=
           '<li role="presentation"><p class="pa-muted pa-opt-already">“' +
           escapeHtml(optionLabelOf(exact) || raw.trim()) +
-          '” is already linked</p></li>';
+          "” is already linked</p></li>";
       } else if (canCreate) {
         html +=
           '<li role="presentation"><button type="button" class="pa-link pa-opt-pick-btn pa-opt-create-btn" role="option" data-create="' +
           escapeHtml(raw.trim()) +
           '">Create “' +
           escapeHtml(raw.trim()) +
-          '”</button></li>';
+          "”</button></li>";
       }
-      html += '</ul>';
+      html += "</ul>";
       results.hidden = false;
       setExpanded(true);
       results.innerHTML = html;
@@ -3093,25 +3249,25 @@
     };
 
     var debounce;
-    search.addEventListener('input', function () {
+    search.addEventListener("input", function () {
       clearTimeout(debounce);
       debounce = setTimeout(function () {
         runSearch({ forceOpen: true });
       }, 160);
     });
-    search.addEventListener('focus', function () {
+    search.addEventListener("focus", function () {
       runSearch({ forceOpen: true });
     });
-    search.addEventListener('blur', function () {
+    search.addEventListener("blur", function () {
       setTimeout(function () {
         if (document.activeElement === search) return;
         if (results.contains(document.activeElement)) return;
         closeResults();
       }, 120);
     });
-    search.addEventListener('keydown', function (ev) {
-      var buttons = results.querySelectorAll('.pa-opt-pick-btn');
-      if (ev.key === 'ArrowDown') {
+    search.addEventListener("keydown", function (ev) {
+      var buttons = results.querySelectorAll(".pa-opt-pick-btn");
+      if (ev.key === "ArrowDown") {
         if (results.hidden) {
           runSearch({ forceOpen: true });
           return;
@@ -3120,23 +3276,23 @@
         ev.preventDefault();
         activeIndex = (activeIndex + 1) % buttons.length;
         highlightActive();
-      } else if (ev.key === 'ArrowUp') {
+      } else if (ev.key === "ArrowUp") {
         if (!buttons.length) return;
         ev.preventDefault();
         activeIndex = (activeIndex - 1 + buttons.length) % buttons.length;
         highlightActive();
-      } else if (ev.key === 'Enter') {
+      } else if (ev.key === "Enter") {
         ev.preventDefault();
         if (!results.hidden && activeIndex >= 0 && buttons[activeIndex]) {
           buttons[activeIndex].click();
           return;
         }
-        var label = (search.value || '').trim();
+        var label = (search.value || "").trim();
         if (!label) return;
-        search.value = '';
+        search.value = "";
         closeResults();
         createOrLinkOption(label);
-      } else if (ev.key === 'Escape') {
+      } else if (ev.key === "Escape") {
         if (!results.hidden) {
           ev.preventDefault();
           closeResults();
@@ -3146,27 +3302,34 @@
   }
 
   function bindOptionDraftDrag(ul) {
-    var items = ul.querySelectorAll('.pa-optitem');
+    var items = ul.querySelectorAll(".pa-optitem");
     for (var i = 0; i < items.length; i++) {
       (function (li) {
-        bindHandleAsDraggable(li, '.pa-drag', function (ev) {
-          ev.dataTransfer.setData('text/plain', li.getAttribute('data-id'));
-        }, function () {
-          var marked = ul.querySelectorAll('.pa-drag-over');
-          for (var m = 0; m < marked.length; m++) marked[m].classList.remove('pa-drag-over');
-        });
-        li.addEventListener('dragover', function (ev) {
+        bindHandleAsDraggable(
+          li,
+          ".pa-drag",
+          function (ev) {
+            ev.dataTransfer.setData("text/plain", li.getAttribute("data-id"));
+          },
+          function () {
+            var marked = ul.querySelectorAll(".pa-drag-over");
+            for (var m = 0; m < marked.length; m++)
+              marked[m].classList.remove("pa-drag-over");
+          },
+        );
+        li.addEventListener("dragover", function (ev) {
           ev.preventDefault();
-          ev.dataTransfer.dropEffect = 'move';
-          var marked = ul.querySelectorAll('.pa-drag-over');
-          for (var m = 0; m < marked.length; m++) marked[m].classList.remove('pa-drag-over');
-          li.classList.add('pa-drag-over');
+          ev.dataTransfer.dropEffect = "move";
+          var marked = ul.querySelectorAll(".pa-drag-over");
+          for (var m = 0; m < marked.length; m++)
+            marked[m].classList.remove("pa-drag-over");
+          li.classList.add("pa-drag-over");
         });
-        li.addEventListener('drop', function (ev) {
+        li.addEventListener("drop", function (ev) {
           ev.preventDefault();
-          var fromId = ev.dataTransfer.getData('text/plain');
-          var toId = li.getAttribute('data-id');
-          li.classList.remove('pa-drag-over');
+          var fromId = ev.dataTransfer.getData("text/plain");
+          var toId = li.getAttribute("data-id");
+          li.classList.remove("pa-drag-over");
           if (!fromId || fromId === toId) return;
           var fromIdx = -1;
           var toIdx = -1;
@@ -3189,31 +3352,36 @@
     var isNew = !!(q && q._new);
     var asGuidance = isNew
       ? !!q.asGuidance
-      : qTypeLabel(q) === 'instructions' || metaVal(q, 'poll_type') === CONFIG.qType.instructions;
-    var backdrop = document.getElementById('pa-modal-backdrop');
-    document.getElementById('pa-cancel-modal').addEventListener('click', function () {
-      closeModal();
-      renderStructure();
-    });
-    backdrop.addEventListener('click', function (ev) {
+      : qTypeLabel(q) === "instructions" ||
+        metaVal(q, "poll_type") === CONFIG.qType.instructions;
+    var backdrop = document.getElementById("pa-modal-backdrop");
+    document
+      .getElementById("pa-cancel-modal")
+      .addEventListener("click", function () {
+        closeModal();
+        renderStructure();
+      });
+    backdrop.addEventListener("click", function (ev) {
       if (ev.target === backdrop) {
         closeModal();
         renderStructure();
       }
     });
-    document.getElementById('pa-save-q').addEventListener('click', async function () {
-      await saveQuestionModal(asGuidance);
-    });
+    document
+      .getElementById("pa-save-q")
+      .addEventListener("click", async function () {
+        await saveQuestionModal(asGuidance);
+      });
 
-    var typeSel = document.getElementById('pa-qtype');
+    var typeSel = document.getElementById("pa-qtype");
     if (typeSel) {
-      typeSel.addEventListener('change', function () {
+      typeSel.addEventListener("change", function () {
         var tid = typeSel.value;
-        var optsWrap = document.getElementById('pa-opts-wrap');
+        var optsWrap = document.getElementById("pa-opts-wrap");
         if (optsWrap) optsWrap.hidden = !typeNeedsOptions(tid);
-        var multiWrap = document.getElementById('pa-multi-wrap');
+        var multiWrap = document.getElementById("pa-multi-wrap");
         if (multiWrap) multiWrap.hidden = !typeNeedsMulti(tid);
-        var promptWrap = document.getElementById('pa-prompt-wrap');
+        var promptWrap = document.getElementById("pa-prompt-wrap");
         if (promptWrap) promptWrap.hidden = !typeNeedsPrompt(tid);
       });
     }
@@ -3225,61 +3393,63 @@
       ensureOptionsCache().catch(function () {});
     }
 
-    var textEl = document.getElementById('pa-qtext');
+    var textEl = document.getElementById("pa-qtext");
     if (textEl) textEl.focus();
   }
 
   async function saveQuestionModal(asGuidance) {
     var q = state.editingQuestion;
     var isNew = !!(q && q._new);
-    var text = (document.getElementById('pa-qtext').value || '').trim();
+    var text = (document.getElementById("pa-qtext").value || "").trim();
     if (!text) {
-      state.modalError = 'Text is required.';
+      state.modalError = "Text is required.";
       renderStructure();
       return;
     }
-    var sectionId = isNew ? q.sectionId : metaVal(q, 'poll_section');
+    var sectionId = isNew ? q.sectionId : metaVal(q, "poll_section");
     var siblings = questionsForSection(sectionId);
     var nextNumber = 1;
     siblings.forEach(function (sib) {
-      var n = Number(metaVal(sib, 'poll_number') || 0);
+      var n = Number(metaVal(sib, "poll_number") || 0);
       if (n >= nextNumber) nextNumber = n + 1;
     });
     var number = isNew
       ? nextNumber
-      : metaVal(q, 'poll_number') !== undefined
-        ? Number(metaVal(q, 'poll_number'))
+      : metaVal(q, "poll_number") !== undefined
+        ? Number(metaVal(q, "poll_number"))
         : nextNumber;
     var typeId = asGuidance
       ? CONFIG.qType.instructions
-      : document.getElementById('pa-qtype').value;
+      : document.getElementById("pa-qtype").value;
     var allowMulti =
-      !asGuidance && document.getElementById('pa-multi') && document.getElementById('pa-multi').checked
+      !asGuidance &&
+      document.getElementById("pa-multi") &&
+      document.getElementById("pa-multi").checked
         ? CONFIG.yesNo.yes
         : CONFIG.yesNo.no;
     var requiredVal = CONFIG.yesNo.yes;
-    if (!asGuidance && document.getElementById('pa-required')) {
-      requiredVal = document.getElementById('pa-required').checked
+    if (!asGuidance && document.getElementById("pa-required")) {
+      requiredVal = document.getElementById("pa-required").checked
         ? CONFIG.yesNo.yes
         : CONFIG.yesNo.no;
     } else if (asGuidance) {
       requiredVal = CONFIG.yesNo.no;
     }
     var prompt =
-      !asGuidance && document.getElementById('pa-prompt')
-        ? (document.getElementById('pa-prompt').value || '').trim()
-        : '';
+      !asGuidance && document.getElementById("pa-prompt")
+        ? (document.getElementById("pa-prompt").value || "").trim()
+        : "";
 
     var title =
       (metaVal(
         state.sections.find(function (s) {
           return s.sharedId === sectionId;
         }) || {},
-        'poll_number'
-      ) || '') +
-      '.' +
+        "poll_number",
+      ) || "") +
+      "." +
       number +
-      ' ' +
+      " " +
       text.slice(0, 80);
 
     var metadata = {
@@ -3304,20 +3474,22 @@
         title: title,
         template: CONFIG.templates.Question,
         published: false,
-        language: 'en',
+        language: "en",
         metadata: metadata,
       };
       if (!isNew) {
         payload._id = q._id;
         payload.sharedId = q.sharedId;
       }
-      var saved = await api('POST', '/api/entities', payload);
+      var saved = await api("POST", "/api/entities", payload);
       var entity = saved.entity || saved;
       if (!entity.metadata) entity.metadata = {};
       if (!asGuidance && typeNeedsOptions(typeId)) {
-        entity.metadata.poll_available_options = state.optionDraft.map(function (o) {
-          return { value: o.value, label: o.label, type: 'entity' };
-        });
+        entity.metadata.poll_available_options = state.optionDraft.map(
+          function (o) {
+            return { value: o.value, label: o.label, type: "entity" };
+          },
+        );
       }
       if (isNew) {
         state.questions.push(entity);
@@ -3345,10 +3517,10 @@
     var rows = await searchByTemplate(CONFIG.templates.Session);
     state.sessions = rows
       .filter(function (s) {
-        return metaVal(s, 'poll_poll') === pollSharedId;
+        return metaVal(s, "poll_poll") === pollSharedId;
       })
       .sort(function (a, b) {
-        return String(a.title || '').localeCompare(String(b.title || ''));
+        return String(a.title || "").localeCompare(String(b.title || ""));
       });
   }
 
@@ -3357,18 +3529,18 @@
     state.error = null;
     try {
       state.poll = await loadEntity(sharedId);
-      if (!state.poll) throw new Error('Poll not found.');
-      if (view === 'sessions') {
+      if (!state.poll) throw new Error("Poll not found.");
+      if (view === "sessions") {
         await loadSessions(sharedId);
-        state.view = 'sessions';
+        state.view = "sessions";
       } else {
         await loadStructure(sharedId);
-        state.view = view || 'structure';
+        state.view = view || "structure";
       }
       render();
     } catch (e) {
       state.error = e.message || String(e);
-      state.view = 'list';
+      state.view = "list";
       renderList();
     } finally {
       setBusy(false);
@@ -3377,9 +3549,13 @@
 
   function configStatusPill(status) {
     var statusCls =
-      status === 'ok' ? 'published' : status === 'missing' ? 'closed' : 'draft';
+      status === "ok" ? "published" : status === "missing" ? "closed" : "draft";
     return (
-      '<span class="pa-pill ' + statusCls + '">' + escapeHtml(status) + '</span>'
+      '<span class="pa-pill ' +
+      statusCls +
+      '">' +
+      escapeHtml(status) +
+      "</span>"
     );
   }
 
@@ -3388,10 +3564,11 @@
     var thReport = state.thesaurusReport || [];
     var rtReport = state.relationTypeReport || [];
     var needsCreate = configNeedsCreate();
-    var html = '';
+    var html = "";
     html += '<div class="pa-modal-backdrop" id="pa-modal-backdrop">';
-    html += '<div class="pa-modal pa-modal-wide" role="dialog" aria-modal="true">';
-    html += '<h2>Configuration</h2>';
+    html +=
+      '<div class="pa-modal pa-modal-wide" role="dialog" aria-modal="true">';
+    html += "<h2>Configuration</h2>";
     html += modalErrorHtml();
     html += '<div class="pa-form pa-config-form">';
     html +=
@@ -3406,9 +3583,9 @@
         html +=
           '<div class="pa-config-block-head"><strong>' +
           escapeHtml(row.name) +
-          '</strong> ' +
+          "</strong> " +
           configStatusPill(row.status) +
-          '</div></div>';
+          "</div></div>";
       });
     }
 
@@ -3421,26 +3598,26 @@
         html +=
           '<div class="pa-config-block-head"><strong>' +
           escapeHtml(row.name) +
-          '</strong> ' +
+          "</strong> " +
           configStatusPill(row.status) +
-          '</div>';
+          "</div>";
         html += '<ul class="pa-config-props">';
-        if (row.status === 'missing') {
+        if (row.status === "missing") {
           html +=
             '<li><span class="pa-prop-bad">' +
             iconCross() +
-            '</span><span>Thesaurus missing</span></li>';
+            "</span><span>Thesaurus missing</span></li>";
         }
         (row.valueResults || []).forEach(function (vr) {
           var mark =
-            vr.status === 'ok'
-              ? '<span class="pa-prop-ok">' + iconCheck() + '</span>'
-              : '<span class="pa-prop-bad">' + iconCross() + '</span>';
+            vr.status === "ok"
+              ? '<span class="pa-prop-ok">' + iconCheck() + "</span>"
+              : '<span class="pa-prop-bad">' + iconCross() + "</span>";
           var detail = escapeHtml(vr.label);
-          if (vr.status === 'missing') detail += ' — missing';
-          html += '<li>' + mark + '<span>' + detail + '</span></li>';
+          if (vr.status === "missing") detail += " — missing";
+          html += "<li>" + mark + "<span>" + detail + "</span></li>";
         });
-        html += '</ul></div>';
+        html += "</ul></div>";
       });
     }
 
@@ -3453,72 +3630,78 @@
         html +=
           '<div class="pa-config-block-head"><strong>' +
           escapeHtml(row.name) +
-          '</strong> ' +
+          "</strong> " +
           configStatusPill(row.status) +
-          '</div>';
+          "</div>";
         html += '<ul class="pa-config-props">';
         (row.propResults || []).forEach(function (pr) {
           var mark =
-            pr.status === 'ok'
-              ? '<span class="pa-prop-ok">' + iconCheck() + '</span>'
-              : '<span class="pa-prop-bad">' + iconCross() + '</span>';
+            pr.status === "ok"
+              ? '<span class="pa-prop-ok">' + iconCheck() + "</span>"
+              : '<span class="pa-prop-bad">' + iconCross() + "</span>";
           var detail =
             escapeHtml(pr.label) +
-            ' <code>' +
+            " <code>" +
             escapeHtml(pr.name) +
-            '</code> · ' +
+            "</code> · " +
             escapeHtml(pr.type);
-          if (pr.status === 'missing') detail += ' — missing';
-          if (pr.status === 'type_mismatch') {
+          if (pr.status === "missing") detail += " — missing";
+          if (pr.status === "type_mismatch") {
             detail +=
-              ' — type is ' +
+              " — type is " +
               escapeHtml(pr.actualType) +
-              ', expected ' +
+              ", expected " +
               escapeHtml(pr.type) +
-              ' (not auto-fixed)';
+              " (not auto-fixed)";
           }
-          if (pr.status === 'config_mismatch' || (pr.notes && pr.notes.length)) {
-            detail += ' — ' + escapeHtml((pr.notes || []).join('; '));
+          if (
+            pr.status === "config_mismatch" ||
+            (pr.notes && pr.notes.length)
+          ) {
+            detail += " — " + escapeHtml((pr.notes || []).join("; "));
           }
-          html += '<li>' + mark + '<span>' + detail + '</span></li>';
+          html += "<li>" + mark + "<span>" + detail + "</span></li>";
         });
-        if (row.status === 'missing') {
+        if (row.status === "missing") {
           html +=
             '<li><span class="pa-prop-bad">' +
             iconCross() +
-            '</span><span>Template itself is missing</span></li>';
+            "</span><span>Template itself is missing</span></li>";
         }
-        html += '</ul></div>';
+        html += "</ul></div>";
       });
     }
 
     html += '<div class="pa-actions">';
-    html += '<button type="button" class="pa-btn" id="pa-cancel-modal">Close</button>';
+    html +=
+      '<button type="button" class="pa-btn" id="pa-cancel-modal">Close</button>';
     html +=
       '<button type="button" class="pa-btn" id="pa-config-recheck">Re-check</button>';
     if (needsCreate) {
       html +=
         '<button type="button" class="pa-btn primary" id="pa-config-create">Create the template structure</button>';
     }
-    html += '</div></div></div></div>';
+    html += "</div></div></div></div>";
     return html;
   }
 
   function bindConfigModal() {
-    var backdrop = document.getElementById('pa-modal-backdrop');
-    document.getElementById('pa-cancel-modal').addEventListener('click', function () {
-      closeModal();
-      renderList();
-    });
-    backdrop.addEventListener('click', function (ev) {
+    var backdrop = document.getElementById("pa-modal-backdrop");
+    document
+      .getElementById("pa-cancel-modal")
+      .addEventListener("click", function () {
+        closeModal();
+        renderList();
+      });
+    backdrop.addEventListener("click", function (ev) {
       if (ev.target === backdrop) {
         closeModal();
         renderList();
       }
     });
-    var recheck = document.getElementById('pa-config-recheck');
+    var recheck = document.getElementById("pa-config-recheck");
     if (recheck) {
-      recheck.addEventListener('click', async function () {
+      recheck.addEventListener("click", async function () {
         setBusy(true);
         try {
           await loadConfigDeps();
@@ -3533,9 +3716,9 @@
         }
       });
     }
-    var createBtn = document.getElementById('pa-config-create');
+    var createBtn = document.getElementById("pa-config-create");
     if (createBtn) {
-      createBtn.addEventListener('click', async function () {
+      createBtn.addEventListener("click", async function () {
         await createTemplateStructure();
       });
     }
@@ -3547,7 +3730,9 @@
       syncConfigIdsFromNames();
       var spec = EXPECTED_RELATION_TYPES[i];
       if (findByName(state.allRelationTypes, spec.name)) continue;
-      var created = await api('POST', '/api/relationtypes', { name: spec.name });
+      var created = await api("POST", "/api/relationtypes", {
+        name: spec.name,
+      });
       if (created && created._id) CONFIG.relationTypes[spec.key] = created._id;
     }
   }
@@ -3559,7 +3744,7 @@
       var spec = EXPECTED_THESAURI[i];
       var found = findByName(state.allThesauri, spec.name);
       if (!found) {
-        var created = await api('POST', '/api/thesauris', {
+        var created = await api("POST", "/api/thesauris", {
           name: spec.name,
           values: spec.values.map(function (v) {
             return { label: v.label };
@@ -3578,7 +3763,7 @@
       missing.forEach(function (want) {
         nextValues.push({ label: want.label });
       });
-      await api('POST', '/api/thesauris', {
+      await api("POST", "/api/thesauris", {
         _id: found._id,
         name: found.name,
         values: nextValues,
@@ -3596,11 +3781,11 @@
         return r.key === spec.key;
       });
       if (!row) continue;
-      if (row.status === 'missing') {
+      if (row.status === "missing") {
         var props = spec.properties.map(propertyPayload);
-        var saved = await api('POST', '/api/templates', {
+        var saved = await api("POST", "/api/templates", {
           name: spec.name,
-          color: '#9ca3af',
+          color: "#9ca3af",
           commonProperties: commonPropertiesSeed(),
           properties: props,
         });
@@ -3622,7 +3807,8 @@
           var idx = nextProps.findIndex(function (p) {
             return p.name === fix.want.name;
           });
-          if (idx >= 0) nextProps[idx] = applyPropertyWiring(nextProps[idx], fix.want);
+          if (idx >= 0)
+            nextProps[idx] = applyPropertyWiring(nextProps[idx], fix.want);
         });
       }
       if (needsMissing) {
@@ -3630,7 +3816,7 @@
           nextProps.push(propertyPayload(want));
         });
       }
-      await api('POST', '/api/templates', {
+      await api("POST", "/api/templates", {
         _id: tpl._id,
         name: tpl.name,
         color: tpl.color,
@@ -3644,11 +3830,11 @@
   async function createTemplateStructure() {
     if (
       !window.confirm(
-        'Fill gaps in the poll configuration?\n\n' +
-          '• Create missing relationship types (by name)\n' +
-          '• Create missing thesauri / values (by label)\n' +
-          '• Create missing templates / properties (labels are Poll-prefixed so Uwazi names become poll_*)\n\n' +
-          'Existing items stay. Wrong property types are not changed.'
+        "Fill gaps in the poll configuration?\n\n" +
+          "• Create missing relationship types (by name)\n" +
+          "• Create missing thesauri / values (by label)\n" +
+          "• Create missing templates / properties (labels are Poll-prefixed so Uwazi names become poll_*)\n\n" +
+          "Existing items stay. Wrong property types are not changed.",
       )
     ) {
       return;
@@ -3663,11 +3849,11 @@
       buildConfigReports();
       state.modalError = null;
       state.error = null;
-      state.modal = 'config';
+      state.modal = "config";
       renderList();
     } catch (e) {
       state.modalError = e.message || String(e);
-      state.modal = 'config';
+      state.modal = "config";
       renderList();
     } finally {
       setBusy(false);
@@ -3677,17 +3863,17 @@
   /* ---------- SurveyMonkey import ---------- */
 
   function smApiBaseUrl() {
-    if (state.importApiBase === 'us') return 'https://api.surveymonkey.com';
-    if (state.importApiBase === 'ca') return 'https://api.surveymonkey.ca';
-    return 'https://api.eu.surveymonkey.com';
+    if (state.importApiBase === "us") return "https://api.surveymonkey.com";
+    if (state.importApiBase === "ca") return "https://api.surveymonkey.ca";
+    return "https://api.eu.surveymonkey.com";
   }
 
   async function smApi(path, token) {
     var res = await fetch(smApiBaseUrl() + path, {
-      method: 'GET',
+      method: "GET",
       headers: {
-        Authorization: 'Bearer ' + token,
-        Accept: 'application/json',
+        Authorization: "Bearer " + token,
+        Accept: "application/json",
       },
     });
     var textBody = await res.text();
@@ -3702,8 +3888,8 @@
         (data && data.error && (data.error.message || data.error.name)) ||
         (Array.isArray(data) && data[0] && data[0].message) ||
         res.statusText ||
-        'SurveyMonkey request failed';
-      if (res.status === 404) msg = 'Survey not found (' + path + '). ' + msg;
+        "SurveyMonkey request failed";
+      if (res.status === 404) msg = "Survey not found (" + path + "). " + msg;
       throw new Error(msg);
     }
     return data;
@@ -3712,7 +3898,7 @@
   function requireSmDetails() {
     if (!SM) {
       throw new Error(
-        'SurveyMonkey helpers missing (PollSmDetails). Re-publish admin via yarn seed:pages.'
+        "SurveyMonkey helpers missing (PollSmDetails). Re-publish admin via yarn seed:pages.",
       );
     }
     return SM;
@@ -3723,38 +3909,52 @@
   }
 
   function buildImportPreviewFromJson(raw) {
-    var details = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    var details = typeof raw === "string" ? JSON.parse(raw) : raw;
     if (!details || !details.pages) {
-      throw new Error('JSON must be a SurveyMonkey /surveys/{id}/details payload (missing pages).');
+      throw new Error(
+        "JSON must be a SurveyMonkey /surveys/{id}/details payload (missing pages).",
+      );
     }
     var preview = buildImportPreviewFromSmDetails(details);
-    preview.source = 'json';
+    preview.source = "json";
     return preview;
   }
 
   function questionKindForExport(q) {
     var typ = qTypeLabel(q);
-    if (typ === 'instructions' || typ === 'Section / instructions') return 'instructions';
-    if (typ === 'choice' || metaVal(q, 'poll_type') === CONFIG.qType.choice) return 'choice';
-    if (typ === 'choice_and_text' || metaVal(q, 'poll_type') === CONFIG.qType.choice_and_text) {
-      return 'choice_and_text';
+    if (typ === "instructions" || typ === "Section / instructions")
+      return "instructions";
+    if (typ === "choice" || metaVal(q, "poll_type") === CONFIG.qType.choice)
+      return "choice";
+    if (
+      typ === "choice_and_text" ||
+      metaVal(q, "poll_type") === CONFIG.qType.choice_and_text
+    ) {
+      return "choice_and_text";
     }
-    if (typ === 'numeric' || metaVal(q, 'poll_type') === CONFIG.qType.numeric) return 'numeric';
-    if (typ === 'date' || metaVal(q, 'poll_type') === CONFIG.qType.date) return 'date';
-    if (typ === 'free_text' || metaVal(q, 'poll_type') === CONFIG.qType.free_text) {
-      return 'free_text';
+    if (typ === "numeric" || metaVal(q, "poll_type") === CONFIG.qType.numeric)
+      return "numeric";
+    if (typ === "date" || metaVal(q, "poll_type") === CONFIG.qType.date)
+      return "date";
+    if (
+      typ === "free_text" ||
+      metaVal(q, "poll_type") === CONFIG.qType.free_text
+    ) {
+      return "free_text";
     }
-    var id = metaVal(q, 'poll_type');
+    var id = metaVal(q, "poll_type");
     for (var k in CONFIG.qType) if (CONFIG.qType[k] === id) return k;
-    return 'free_text';
+    return "free_text";
   }
 
   function downloadJson(filename, obj) {
-    var blob = new Blob([JSON.stringify(obj, null, 2)], {
-      type: 'application/json',
-    });
+    downloadText(filename, JSON.stringify(obj, null, 2), "application/json");
+  }
+
+  function downloadText(filename, text, mime) {
+    var blob = new Blob([text], { type: mime || "text/plain;charset=utf-8" });
     var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
+    var a = document.createElement("a");
     a.href = url;
     a.download = filename;
     document.body.appendChild(a);
@@ -3765,6 +3965,207 @@
     }, 1000);
   }
 
+  function requirePollExport() {
+    if (!PE) {
+      throw new Error(
+        "Export helpers missing (PollExport). Re-publish admin via yarn seed:pages.",
+      );
+    }
+    return PE;
+  }
+
+  function answerEntityToExportPayload(q, answerEntity) {
+    if (!answerEntity) return null;
+    var type = questionTypeKey(q);
+    if (!type || type === "instructions") return null;
+    if (type === "choice" || type === "choice_and_text") {
+      var avail = Object.create(null);
+      metaList(q, "poll_available_options").forEach(function (o) {
+        if (o && o.value !== undefined) {
+          avail[o.value] = o.label || String(o.value);
+        }
+      });
+      var selectedLabels = metaList(answerEntity, "poll_selected_options")
+        .map(function (o) {
+          if (!o) return "";
+          if (o.label) return String(o.label);
+          return avail[o.value] || String(o.value || "");
+        })
+        .filter(Boolean);
+      var payload = { selectedLabels: selectedLabels };
+      if (type === "choice_and_text") {
+        payload.text = metaVal(answerEntity, "poll_text") || "";
+      }
+      if (!selectedLabels.length && !payload.text) return null;
+      return payload;
+    }
+    if (type === "free_text") {
+      var text = metaVal(answerEntity, "poll_text");
+      if (text === undefined || text === null || text === "") return null;
+      return { text: String(text) };
+    }
+    if (type === "numeric") {
+      var num = metaVal(answerEntity, "poll_numeric");
+      if (num === undefined || num === null || num === "") return null;
+      return { numeric: num };
+    }
+    if (type === "date") {
+      var date = metaVal(answerEntity, "poll_date");
+      if (date === undefined || date === null || date === "") return null;
+      return { date: date };
+    }
+    return null;
+  }
+
+  function buildSessionExportSnapshot(session, answersByQuestion) {
+    var poll = state.poll || {};
+    var sectionsById = Object.create(null);
+    (state.sections || []).forEach(function (sec) {
+      sectionsById[sec.sharedId] = sec;
+    });
+    var questions = (state.questions || []).slice().sort(function (a, b) {
+      var sa = sectionsById[metaVal(a, "poll_section")];
+      var sb = sectionsById[metaVal(b, "poll_section")];
+      var na = sa ? metaVal(sa, "poll_number") || 0 : 0;
+      var nb = sb ? metaVal(sb, "poll_number") || 0 : 0;
+      if (na !== nb) return na - nb;
+      return (
+        (metaVal(a, "poll_number") || 0) - (metaVal(b, "poll_number") || 0)
+      );
+    });
+    return {
+      poll: {
+        title: poll.title || "",
+        sharedId: poll.sharedId || "",
+      },
+      session: {
+        sharedId: session.sharedId || "",
+        respondent: metaVal(session, "poll_respondent") || session.title || "",
+        status: sessionStatusLabel(session),
+        token: metaVal(session, "poll_token") || "",
+      },
+      items: questions.map(function (q) {
+        var sec = sectionsById[metaVal(q, "poll_section")] || {};
+        var type = questionTypeKey(q);
+        return {
+          sectionNumber: metaVal(sec, "poll_number"),
+          sectionTitle: sec.title || "",
+          questionSharedId: q.sharedId,
+          questionNumber: metaVal(q, "poll_number"),
+          questionText: metaVal(q, "poll_question_text") || q.title || "",
+          questionType: type,
+          required: questionIsRequired(q),
+          answer: answerEntityToExportPayload(q, answersByQuestion[q.sharedId]),
+        };
+      }),
+    };
+  }
+
+  function answersMapForSession(answerRows) {
+    var map = Object.create(null);
+    (answerRows || []).forEach(function (a) {
+      var qid = metaVal(a, "poll_question");
+      if (qid) map[qid] = a;
+    });
+    return map;
+  }
+
+  function sessionExportBasename(session) {
+    var poll = String((state.poll && state.poll.title) || "poll")
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 40);
+    var who = String(
+      metaVal(session, "poll_respondent") || session.title || "session",
+    )
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 30);
+    return (poll || "poll") + "-" + (who || "session");
+  }
+
+  async function ensureStructureForExport() {
+    if (!state.poll || !state.poll.sharedId) throw new Error("No poll loaded.");
+    // Sessions view may not have loaded structure yet (or it may be from another poll).
+    await loadStructure(state.poll.sharedId);
+  }
+
+  async function exportOneSessionLongCsv(sessionSharedId) {
+    var exportApi = requirePollExport();
+    var session = (state.sessions || []).find(function (s) {
+      return s.sharedId === sessionSharedId;
+    });
+    if (!session) throw new Error("Session not found.");
+    await ensureStructureForExport();
+    var answers = await answersForSession(sessionSharedId);
+    var snapshot = buildSessionExportSnapshot(
+      session,
+      answersMapForSession(answers),
+    );
+    downloadText(
+      sessionExportBasename(session) + "-answers.csv",
+      exportApi.buildLongCsv(snapshot),
+      "text/csv;charset=utf-8",
+    );
+  }
+
+  async function exportOneSessionPrint(sessionSharedId) {
+    var exportApi = requirePollExport();
+    var session = (state.sessions || []).find(function (s) {
+      return s.sharedId === sessionSharedId;
+    });
+    if (!session) throw new Error("Session not found.");
+    await ensureStructureForExport();
+    var answers = await answersForSession(sessionSharedId);
+    var snapshot = buildSessionExportSnapshot(
+      session,
+      answersMapForSession(answers),
+    );
+    var html = exportApi.buildPrintHtml(snapshot);
+    var w = window.open("", "_blank");
+    if (!w) {
+      window.alert("Pop-up blocked. Allow pop-ups to print or save as PDF.");
+      return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(function () {
+      try {
+        w.print();
+      } catch (e) {
+        /* ignore */
+      }
+    }, 300);
+  }
+
+  async function exportAllSessionsWideCsv() {
+    var exportApi = requirePollExport();
+    if (!state.sessions || !state.sessions.length) {
+      throw new Error("No sessions to export.");
+    }
+    await ensureStructureForExport();
+    var allAnswers = CONFIG.templates.Answer
+      ? await searchByTemplate(CONFIG.templates.Answer)
+      : [];
+    var snapshots = state.sessions.map(function (session) {
+      var rows = allAnswers.filter(function (a) {
+        return metaVal(a, "poll_session") === session.sharedId;
+      });
+      return buildSessionExportSnapshot(session, answersMapForSession(rows));
+    });
+    var poll = String((state.poll && state.poll.title) || "poll")
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 50);
+    downloadText(
+      (poll || "poll") + "-sessions-wide.csv",
+      exportApi.buildWideCsv(snapshots),
+      "text/csv;charset=utf-8",
+    );
+  }
+
   async function exportPollAsSmJson(pollSharedId) {
     if (!pollSharedId) return;
     setBusy(true);
@@ -3773,38 +4174,49 @@
       requireSmDetails();
       await loadConfigDeps();
       var poll = await loadEntity(pollSharedId);
-      if (!poll) throw new Error('Poll not found.');
+      if (!poll) throw new Error("Poll not found.");
       await loadStructure(pollSharedId);
       var sections = (state.sections || []).slice().sort(function (a, b) {
-        return (metaVal(a, 'poll_number') || 0) - (metaVal(b, 'poll_number') || 0);
+        return (
+          (metaVal(a, "poll_number") || 0) - (metaVal(b, "poll_number") || 0)
+        );
       });
       var payload = {
         title: poll.title,
         sharedId: poll.sharedId,
         sections: sections.map(function (sec) {
-          var qs = questionsForSection(sec.sharedId).slice().sort(function (a, b) {
-            return (metaVal(a, 'poll_number') || 0) - (metaVal(b, 'poll_number') || 0);
-          });
+          var qs = questionsForSection(sec.sharedId)
+            .slice()
+            .sort(function (a, b) {
+              return (
+                (metaVal(a, "poll_number") || 0) -
+                (metaVal(b, "poll_number") || 0)
+              );
+            });
           return {
             sharedId: sec.sharedId,
             title: sec.title,
             questions: qs.map(function (q) {
               var kind = questionKindForExport(q);
               var choices = [];
-              if (kind === 'choice' || kind === 'choice_and_text') {
-                choices = metaList(q, 'poll_available_options').map(function (o) {
-                  return {
-                    sharedId: o.value,
-                    text: o.label || o.value || '',
-                  };
-                });
+              if (kind === "choice" || kind === "choice_and_text") {
+                choices = metaList(q, "poll_available_options").map(
+                  function (o) {
+                    return {
+                      sharedId: o.value,
+                      text: o.label || o.value || "",
+                    };
+                  },
+                );
               }
               return {
                 sharedId: q.sharedId,
-                text: metaVal(q, 'poll_question_text') || q.title || '',
+                text: metaVal(q, "poll_question_text") || q.title || "",
                 kind: kind,
-                allowMultiple: metaVal(q, 'poll_allow_multiple') === CONFIG.yesNo.yes,
-                required: kind === 'instructions' ? false : questionIsRequired(q),
+                allowMultiple:
+                  metaVal(q, "poll_allow_multiple") === CONFIG.yesNo.yes,
+                required:
+                  kind === "instructions" ? false : questionIsRequired(q),
                 choices: choices,
               };
             }),
@@ -3812,11 +4224,11 @@
         }),
       };
       var details = SM.exportPollToSmDetails(payload);
-      var safeName = String(poll.title || 'poll')
-        .replace(/[^a-z0-9]+/gi, '-')
-        .replace(/^-|-$/g, '')
+      var safeName = String(poll.title || "poll")
+        .replace(/[^a-z0-9]+/gi, "-")
+        .replace(/^-|-$/g, "")
         .slice(0, 60);
-      downloadJson((safeName || 'poll') + '-sm-details.json', details);
+      downloadJson((safeName || "poll") + "-sm-details.json", details);
     } catch (err) {
       state.error = err.message || String(err);
       renderList();
@@ -3827,35 +4239,33 @@
 
   function renderImportModalHtml() {
     var preview = state.importPreview;
-    var canCreate =
-      !!preview &&
-      configIsOk() &&
-      !state.importProgress;
-    var html = '';
+    var canCreate = !!preview && configIsOk() && !state.importProgress;
+    var html = "";
     html += '<div class="pa-modal-backdrop" id="pa-modal-backdrop">';
-    html += '<div class="pa-modal pa-modal-wide" role="dialog" aria-modal="true">';
-    html += '<h2>Import poll</h2>';
+    html +=
+      '<div class="pa-modal pa-modal-wide" role="dialog" aria-modal="true">';
+    html += "<h2>Import poll</h2>";
     html += modalErrorHtml();
     if (state.importProgress) {
       html +=
         '<p class="pa-import-status" role="status" aria-live="polite">' +
         escapeHtml(state.importProgress) +
-        '</p>';
+        "</p>";
     }
     html += '<div class="pa-form pa-config-form">';
     html += '<div class="pa-field"><span class="pa-label-like">Source</span>';
     html += '<div class="pa-toggle-row">';
     html +=
       '<label class="pa-radio"><input type="radio" name="pa-import-source" value="sm"' +
-      (state.importSource === 'sm' ? ' checked' : '') +
-      ' /> SurveyMonkey</label>';
+      (state.importSource === "sm" ? " checked" : "") +
+      " /> SurveyMonkey</label>";
     html +=
       '<label class="pa-radio"><input type="radio" name="pa-import-source" value="json"' +
-      (state.importSource === 'json' ? ' checked' : '') +
-      ' /> JSON</label>';
-    html += '</div></div>';
+      (state.importSource === "json" ? " checked" : "") +
+      " /> JSON</label>";
+    html += "</div></div>";
 
-    if (state.importSource === 'sm') {
+    if (state.importSource === "sm") {
       html +=
         '<div class="pa-field"><label for="pa-import-token">Access token</label>' +
         '<input id="pa-import-token" type="text" autocomplete="off" value="' +
@@ -3870,35 +4280,37 @@
       html +=
         '<div class="pa-field"><label for="pa-import-base">API base</label><select id="pa-import-base">';
       [
-        ['eu', 'EU (api.eu.surveymonkey.com)'],
-        ['us', 'US (api.surveymonkey.com)'],
-        ['ca', 'CA (api.surveymonkey.ca)'],
+        ["eu", "EU (api.eu.surveymonkey.com)"],
+        ["us", "US (api.surveymonkey.com)"],
+        ["ca", "CA (api.surveymonkey.ca)"],
       ].forEach(function (pair) {
         html +=
           '<option value="' +
           pair[0] +
           '"' +
-          (state.importApiBase === pair[0] ? ' selected' : '') +
-          '>' +
+          (state.importApiBase === pair[0] ? " selected" : "") +
+          ">" +
           pair[1] +
-          '</option>';
+          "</option>";
       });
-      html += '</select></div>';
-      var fetching = !!(state.importProgress && /^Fetching/i.test(state.importProgress));
+      html += "</select></div>";
+      var fetching = !!(
+        state.importProgress && /^Fetching/i.test(state.importProgress)
+      );
       html +=
         '<div class="pa-field"><button type="button" class="pa-btn primary" id="pa-import-fetch"' +
-        (fetching || state.importProgress ? ' disabled' : '') +
-        '>' +
-        (fetching ? 'Fetching…' : 'Fetch') +
-        '</button></div>';
+        (fetching || state.importProgress ? " disabled" : "") +
+        ">" +
+        (fetching ? "Fetching…" : "Fetch") +
+        "</button></div>";
     } else {
       html +=
         '<div class="pa-field"><label for="pa-import-json">SurveyMonkey details JSON</label>' +
         '<textarea id="pa-import-json" class="pa-import-json" rows="10" placeholder="Paste /surveys/{id}/details JSON">' +
         escapeHtml(state.importJson) +
-        '</textarea>' +
-        docsLinkHtml('Documentation') +
-        '</div>';
+        "</textarea>" +
+        docsLinkHtml("Documentation") +
+        "</div>";
       html +=
         '<div class="pa-field"><label for="pa-import-file">Or choose file</label>' +
         '<input id="pa-import-file" type="file" accept="application/json,.json" /></div>';
@@ -3911,41 +4323,45 @@
       html += '<div class="pa-config-block pa-import-preview">';
       html +=
         '<div class="pa-config-block-head"><strong>Preview</strong> ' +
-        configStatusPill('ok') +
-        '</div>';
+        configStatusPill("ok") +
+        "</div>";
       html +=
         '<p style="margin:0 0 0.35rem"><strong>' +
         escapeHtml(preview.title) +
-        '</strong>';
+        "</strong>";
       if (preview.nickname) {
         html +=
-          ' <span class="pa-muted">(' + escapeHtml(preview.nickname) + ')</span>';
+          ' <span class="pa-muted">(' +
+          escapeHtml(preview.nickname) +
+          ")</span>";
       }
-      html += '</p>';
+      html += "</p>";
       html +=
         '<p class="pa-muted" style="margin:0">' +
         st.sections +
-        ' sections · ' +
+        " sections · " +
         st.items +
-        ' items · choice ' +
+        " items · choice " +
         st.choice +
-        ' · multi ' +
+        " · multi " +
         st.multi +
-        ' · text ' +
+        " · text " +
         st.text +
-        ' · numeric ' +
+        " · numeric " +
         st.numeric +
-        ' · date ' +
+        " · date " +
         (st.date || 0) +
-        ' · instructions ' +
+        " · instructions " +
         st.guidance +
-        ' · skipped ' +
+        " · skipped " +
         st.skipped +
-        '</p>';
+        "</p>";
       html +=
         '<button type="button" class="pa-link" id="pa-import-toggle-preview" style="margin-top:0.45rem">' +
-        (state.importPreviewOpen ? 'Hide section breakdown' : 'Show section breakdown') +
-        '</button>';
+        (state.importPreviewOpen
+          ? "Hide section breakdown"
+          : "Show section breakdown") +
+        "</button>";
       if (state.importPreviewOpen) {
         html += '<ul class="pa-config-props" style="margin-top:0.5rem">';
         preview.sections.forEach(function (sec, i) {
@@ -3954,15 +4370,15 @@
           }).length;
           var skipped = sec.items.length - kept;
           html +=
-            '<li><span>' +
-            escapeHtml(i + 1 + '. ' + sec.title) +
-            ' — ' +
+            "<li><span>" +
+            escapeHtml(i + 1 + ". " + sec.title) +
+            " — " +
             kept +
-            ' items' +
-            (skipped ? ' (' + skipped + ' skipped)' : '') +
-            '</span></li>';
+            " items" +
+            (skipped ? " (" + skipped + " skipped)" : "") +
+            "</span></li>";
         });
-        html += '</ul>';
+        html += "</ul>";
       }
       if (preview.warnings && preview.warnings.length) {
         html +=
@@ -3970,17 +4386,22 @@
           preview.warnings.length +
           ' warning(s)</summary><ul class="pa-config-props">';
         preview.warnings.slice(0, 40).forEach(function (w) {
-          html += '<li><span class="pa-prop-bad">' + iconCross() + '</span><span>' + escapeHtml(w) + '</span></li>';
+          html +=
+            '<li><span class="pa-prop-bad">' +
+            iconCross() +
+            "</span><span>" +
+            escapeHtml(w) +
+            "</span></li>";
         });
         if (preview.warnings.length > 40) {
           html +=
             '<li><span class="pa-muted">…and ' +
             (preview.warnings.length - 40) +
-            ' more</span></li>';
+            " more</span></li>";
         }
-        html += '</ul></details>';
+        html += "</ul></details>";
       }
-      html += '</div>';
+      html += "</div>";
       if (!configIsOk()) {
         html +=
           '<p class="pa-error">Configuration must be valid (green) before creating a poll. Fix templates via Configuration first.</p>';
@@ -3988,34 +4409,37 @@
     }
 
     html += '<div class="pa-actions">';
-    html += '<button type="button" class="pa-btn" id="pa-cancel-modal">Cancel</button>';
+    html +=
+      '<button type="button" class="pa-btn" id="pa-cancel-modal">Cancel</button>';
     html +=
       '<button type="button" class="pa-btn primary" id="pa-import-create"' +
-      (canCreate ? '' : ' disabled') +
-      '>Create poll</button>';
-    html += '</div></div></div></div>';
+      (canCreate ? "" : " disabled") +
+      ">Create poll</button>";
+    html += "</div></div></div></div>";
     return html;
   }
 
   function readImportFormIntoState() {
-    var tokenEl = document.getElementById('pa-import-token');
-    if (tokenEl) state.importToken = tokenEl.value || '';
-    var surveyEl = document.getElementById('pa-import-survey');
-    if (surveyEl) state.importSurveyId = (surveyEl.value || '').trim();
-    var baseEl = document.getElementById('pa-import-base');
-    if (baseEl) state.importApiBase = baseEl.value || 'eu';
-    var jsonEl = document.getElementById('pa-import-json');
-    if (jsonEl) state.importJson = jsonEl.value || '';
+    var tokenEl = document.getElementById("pa-import-token");
+    if (tokenEl) state.importToken = tokenEl.value || "";
+    var surveyEl = document.getElementById("pa-import-survey");
+    if (surveyEl) state.importSurveyId = (surveyEl.value || "").trim();
+    var baseEl = document.getElementById("pa-import-base");
+    if (baseEl) state.importApiBase = baseEl.value || "eu";
+    var jsonEl = document.getElementById("pa-import-json");
+    if (jsonEl) state.importJson = jsonEl.value || "";
   }
 
   function bindImportModal() {
-    var backdrop = document.getElementById('pa-modal-backdrop');
-    document.getElementById('pa-cancel-modal').addEventListener('click', function () {
-      readImportFormIntoState();
-      closeModal();
-      renderList();
-    });
-    backdrop.addEventListener('click', function (ev) {
+    var backdrop = document.getElementById("pa-modal-backdrop");
+    document
+      .getElementById("pa-cancel-modal")
+      .addEventListener("click", function () {
+        readImportFormIntoState();
+        closeModal();
+        renderList();
+      });
+    backdrop.addEventListener("click", function (ev) {
       if (ev.target === backdrop) {
         readImportFormIntoState();
         closeModal();
@@ -4024,7 +4448,7 @@
     });
     var radios = cardEl.querySelectorAll('input[name="pa-import-source"]');
     for (var r = 0; r < radios.length; r++) {
-      radios[r].addEventListener('change', function (ev) {
+      radios[r].addEventListener("change", function (ev) {
         readImportFormIntoState();
         state.importSource = ev.target.value;
         state.importPreview = null;
@@ -4032,47 +4456,47 @@
         renderList();
       });
     }
-    var fetchBtn = document.getElementById('pa-import-fetch');
+    var fetchBtn = document.getElementById("pa-import-fetch");
     if (fetchBtn) {
-      fetchBtn.addEventListener('click', async function () {
+      fetchBtn.addEventListener("click", async function () {
         await fetchImportFromSm();
       });
     }
-    var parseBtn = document.getElementById('pa-import-parse');
+    var parseBtn = document.getElementById("pa-import-parse");
     if (parseBtn) {
-      parseBtn.addEventListener('click', function () {
+      parseBtn.addEventListener("click", function () {
         parseImportJson();
       });
     }
-    var fileEl = document.getElementById('pa-import-file');
+    var fileEl = document.getElementById("pa-import-file");
     if (fileEl) {
-      fileEl.addEventListener('change', function () {
+      fileEl.addEventListener("change", function () {
         var f = fileEl.files && fileEl.files[0];
         if (!f) return;
         var reader = new FileReader();
         reader.onload = function () {
-          state.importJson = String(reader.result || '');
+          state.importJson = String(reader.result || "");
           state.modalError = null;
           renderList();
         };
         reader.onerror = function () {
-          state.modalError = 'Could not read file.';
+          state.modalError = "Could not read file.";
           renderList();
         };
         reader.readAsText(f);
       });
     }
-    var tog = document.getElementById('pa-import-toggle-preview');
+    var tog = document.getElementById("pa-import-toggle-preview");
     if (tog) {
-      tog.addEventListener('click', function () {
+      tog.addEventListener("click", function () {
         readImportFormIntoState();
         state.importPreviewOpen = !state.importPreviewOpen;
         renderList();
       });
     }
-    var createBtn = document.getElementById('pa-import-create');
+    var createBtn = document.getElementById("pa-import-create");
     if (createBtn) {
-      createBtn.addEventListener('click', async function () {
+      createBtn.addEventListener("click", async function () {
         await createPollFromImport();
       });
     }
@@ -4082,22 +4506,22 @@
     readImportFormIntoState();
     state.modalError = null;
     if (!state.importToken.trim()) {
-      state.modalError = 'Access token is required.';
+      state.modalError = "Access token is required.";
       renderList();
       return;
     }
     if (!state.importSurveyId) {
-      state.modalError = 'Survey ID is required.';
+      state.modalError = "Survey ID is required.";
       renderList();
       return;
     }
-    state.importProgress = 'Fetching…';
+    state.importProgress = "Fetching…";
     renderList();
     setBusy(true);
     try {
       var details = await smApi(
-        '/v3/surveys/' + encodeURIComponent(state.importSurveyId) + '/details',
-        state.importToken.trim()
+        "/v3/surveys/" + encodeURIComponent(state.importSurveyId) + "/details",
+        state.importToken.trim(),
       );
       state.importPreview = buildImportPreviewFromSmDetails(details);
       state.importPreviewOpen = false;
@@ -4110,7 +4534,7 @@
       var msg = e.message || String(e);
       if (/Failed to fetch|NetworkError|Load failed/i.test(msg)) {
         msg =
-          'Could not reach SurveyMonkey (network/CORS). Check API base, or paste details JSON instead.';
+          "Could not reach SurveyMonkey (network/CORS). Check API base, or paste details JSON instead.";
       }
       state.modalError = msg;
       renderList();
@@ -4123,7 +4547,8 @@
     readImportFormIntoState();
     state.modalError = null;
     try {
-      if (!state.importJson.trim()) throw new Error('Paste or upload JSON first.');
+      if (!state.importJson.trim())
+        throw new Error("Paste or upload JSON first.");
       state.importPreview = buildImportPreviewFromJson(state.importJson);
       state.importPreviewOpen = false;
       renderList();
@@ -4157,8 +4582,10 @@
   }
 
   async function ensureOptionEntity(label, cacheByLabel) {
-    var key = String(label || '').trim().toLowerCase();
-    if (!key) throw new Error('Empty option label');
+    var key = String(label || "")
+      .trim()
+      .toLowerCase();
+    if (!key) throw new Error("Empty option label");
     if (cacheByLabel[key]) return cacheByLabel[key];
     cacheByLabel.__inflight = cacheByLabel.__inflight || {};
     if (cacheByLabel.__inflight[key]) return cacheByLabel.__inflight[key];
@@ -4179,11 +4606,11 @@
     }
 
     cacheByLabel.__inflight[key] = (async function () {
-      var saved = await apiWrite('POST', '/api/entities', {
+      var saved = await apiWrite("POST", "/api/entities", {
         title: label,
         template: CONFIG.templates.Option,
         published: false,
-        language: 'en',
+        language: "en",
         metadata: {
           poll_label: [{ value: label }],
         },
@@ -4212,9 +4639,9 @@
     var labels = [];
     (preview.sections || []).forEach(function (sec) {
       (sec.items || []).forEach(function (it) {
-        if (it.skip || it.kind !== 'choice') return;
+        if (it.skip || it.kind !== "choice") return;
         (it.choices || []).forEach(function (c) {
-          var lab = (c && c.text) || 'Option';
+          var lab = (c && c.text) || "Option";
           var key = String(lab).trim().toLowerCase();
           if (!key || seen[key]) return;
           seen[key] = true;
@@ -4226,12 +4653,16 @@
   }
 
   async function countImportedStructure(pollSharedId) {
-    var sections = (await searchByTemplate(CONFIG.templates.Section)).filter(function (s) {
-      return metaVal(s, 'poll_poll') === pollSharedId;
-    });
-    var questions = (await searchByTemplate(CONFIG.templates.Question)).filter(function (q) {
-      return metaVal(q, 'poll_poll') === pollSharedId;
-    });
+    var sections = (await searchByTemplate(CONFIG.templates.Section)).filter(
+      function (s) {
+        return metaVal(s, "poll_poll") === pollSharedId;
+      },
+    );
+    var questions = (await searchByTemplate(CONFIG.templates.Question)).filter(
+      function (q) {
+        return metaVal(q, "poll_poll") === pollSharedId;
+      },
+    );
     return { sections: sections.length, items: questions.length };
   }
 
@@ -4249,13 +4680,13 @@
       gotItems: gotItems,
       summary:
         gotSec +
-        '/' +
+        "/" +
         wantSec +
-        ' sections, ' +
+        " sections, " +
         gotItems +
-        '/' +
+        "/" +
         wantItems +
-        ' items',
+        " items",
     };
   }
 
@@ -4263,22 +4694,27 @@
    * Hybrid verify: trust create counters when they match preview; otherwise
    * retry search with backoff (ES can lag after parallel creates).
    */
-  async function verifyImportedPoll(preview, pollSharedId, createdSections, createdItems) {
+  async function verifyImportedPoll(
+    preview,
+    pollSharedId,
+    createdSections,
+    createdItems,
+  ) {
     var wantSec = (preview.sections || []).length;
     var wantItems = expectedImportItemCount(preview);
     if (createdSections === wantSec && createdItems === wantItems) {
       return {
         ok: true,
-        source: 'counters',
+        source: "counters",
         summary:
           createdSections +
-          '/' +
+          "/" +
           wantSec +
-          ' sections, ' +
+          " sections, " +
           createdItems +
-          '/' +
+          "/" +
           wantItems +
-          ' items',
+          " items",
       };
     }
 
@@ -4286,18 +4722,22 @@
     var maxAttempts = 12;
     var lastCheck = null;
     var stableHits = 0;
-    var prevSummary = '';
+    var prevSummary = "";
     while (attempts < maxAttempts) {
       attempts += 1;
       state.importProgress =
-        'Verifying import… (search attempt ' + attempts + '/' + maxAttempts + ')';
+        "Verifying import… (search attempt " +
+        attempts +
+        "/" +
+        maxAttempts +
+        ")";
       renderList();
       var counts = await countImportedStructure(pollSharedId);
       lastCheck = importCompletenessMessage(preview, counts);
       if (lastCheck.ok) {
         return {
           ok: true,
-          source: 'search',
+          source: "search",
           summary: lastCheck.summary,
         };
       }
@@ -4312,26 +4752,26 @@
 
     return {
       ok: false,
-      source: 'search',
+      source: "search",
       summary: lastCheck
         ? lastCheck.summary
         : createdSections +
-          '/' +
+          "/" +
           wantSec +
-          ' sections, ' +
+          " sections, " +
           createdItems +
-          '/' +
+          "/" +
           wantItems +
-          ' items',
+          " items",
       runSummary:
         createdSections +
-        '/' +
+        "/" +
         wantSec +
-        ' sections, ' +
+        " sections, " +
         createdItems +
-        '/' +
+        "/" +
         wantItems +
-        ' items (this run)',
+        " items (this run)",
     };
   }
 
@@ -4339,7 +4779,7 @@
     var preview = state.importPreview;
     if (!preview) return;
     if (!configIsOk()) {
-      state.modalError = 'Configuration is not valid.';
+      state.modalError = "Configuration is not valid.";
       renderList();
       return;
     }
@@ -4350,19 +4790,26 @@
     try {
       await loadConfigDeps();
       if (!configIsOk()) {
-        throw new Error('Configuration became invalid. Fix Configuration and retry.');
+        throw new Error(
+          "Configuration became invalid. Fix Configuration and retry.",
+        );
       }
-      state.importProgress = 'Creating poll…';
+      state.importProgress = "Creating poll…";
       renderList();
-      var pollSaved = await apiWrite('POST', '/api/entities', {
+      var pollSaved = await apiWrite("POST", "/api/entities", {
         title: preview.title,
         template: CONFIG.templates.Poll,
         published: false,
-        language: 'en',
+        language: "en",
         metadata: {
           poll_description: preview.nickname
-            ? [{ value: 'Imported from SurveyMonkey (' + preview.nickname + ')' }]
-            : [{ value: 'Imported from SurveyMonkey' }],
+            ? [
+                {
+                  value:
+                    "Imported from SurveyMonkey (" + preview.nickname + ")",
+                },
+              ]
+            : [{ value: "Imported from SurveyMonkey" }],
           poll_status: [{ value: CONFIG.pollStatus.draft }],
         },
       });
@@ -4372,14 +4819,14 @@
       var uniqueLabels = collectUniqueImportOptionLabels(preview);
       if (uniqueLabels.length) {
         var optDone = 0;
-        state.importProgress = 'Creating options… 0/' + uniqueLabels.length;
+        state.importProgress = "Creating options… 0/" + uniqueLabels.length;
         renderList();
         await mapPool(uniqueLabels, IMPORT_CONCURRENCY, async function (lab) {
           await ensureOptionEntity(lab, optionCache);
           optDone += 1;
           if (optDone % 20 === 0 || optDone === uniqueLabels.length) {
             state.importProgress =
-              'Creating options… ' + optDone + '/' + uniqueLabels.length;
+              "Creating options… " + optDone + "/" + uniqueLabels.length;
             renderList();
           }
         });
@@ -4390,35 +4837,43 @@
         return { secPrev: secPrev, index: s };
       });
       state.importProgress =
-        'Creating sections… 0/' + sectionJobs.length + ' (×' + IMPORT_CONCURRENCY + ')';
+        "Creating sections… 0/" +
+        sectionJobs.length +
+        " (×" +
+        IMPORT_CONCURRENCY +
+        ")";
       renderList();
-      var sectionResults = await mapPool(sectionJobs, IMPORT_CONCURRENCY, async function (job) {
-        var secSaved = await apiWrite('POST', '/api/entities', {
-          title: job.secPrev.title,
-          template: CONFIG.templates.Section,
-          published: false,
-          language: 'en',
-          metadata: {
-            poll_number: [{ value: job.index + 1 }],
-            poll_poll: [{ value: poll.sharedId }],
-          },
-        });
-        createdSections += 1;
-        state.importProgress =
-          'Creating sections… ' +
-          createdSections +
-          '/' +
-          sectionJobs.length +
-          ' (×' +
-          IMPORT_CONCURRENCY +
-          ')';
-        renderList();
-        return {
-          index: job.index,
-          section: secSaved.entity || secSaved,
-          secPrev: job.secPrev,
-        };
-      });
+      var sectionResults = await mapPool(
+        sectionJobs,
+        IMPORT_CONCURRENCY,
+        async function (job) {
+          var secSaved = await apiWrite("POST", "/api/entities", {
+            title: job.secPrev.title,
+            template: CONFIG.templates.Section,
+            published: false,
+            language: "en",
+            metadata: {
+              poll_number: [{ value: job.index + 1 }],
+              poll_poll: [{ value: poll.sharedId }],
+            },
+          });
+          createdSections += 1;
+          state.importProgress =
+            "Creating sections… " +
+            createdSections +
+            "/" +
+            sectionJobs.length +
+            " (×" +
+            IMPORT_CONCURRENCY +
+            ")";
+          renderList();
+          return {
+            index: job.index,
+            section: secSaved.entity || secSaved,
+            secPrev: job.secPrev,
+          };
+        },
+      );
       sectionResults.sort(function (a, b) {
         return a.index - b.index;
       });
@@ -4439,43 +4894,44 @@
       });
 
       state.importProgress =
-        'Creating questions… 0/' + wantItems + ' (×' + IMPORT_CONCURRENCY + ')';
+        "Creating questions… 0/" + wantItems + " (×" + IMPORT_CONCURRENCY + ")";
       renderList();
       await mapPool(questionJobs, IMPORT_CONCURRENCY, async function (job) {
         var it = job.it;
         var typeId = CONFIG.qType.free_text;
         var allowMulti = CONFIG.yesNo.no;
         var requiredVal = CONFIG.yesNo.yes;
-        if (it.kind === 'instructions') {
+        if (it.kind === "instructions") {
           typeId = CONFIG.qType.instructions;
           requiredVal = CONFIG.yesNo.no;
-        } else if (it.kind === 'numeric') typeId = CONFIG.qType.numeric;
-        else if (it.kind === 'date') typeId = CONFIG.qType.date;
-        else if (it.kind === 'choice') {
+        } else if (it.kind === "numeric") typeId = CONFIG.qType.numeric;
+        else if (it.kind === "date") typeId = CONFIG.qType.date;
+        else if (it.kind === "choice") {
           typeId = CONFIG.qType.choice;
           allowMulti = it.allowMultiple ? CONFIG.yesNo.yes : CONFIG.yesNo.no;
-        } else if (it.kind === 'free_text') typeId = CONFIG.qType.free_text;
-        if (it.kind !== 'instructions') {
-          requiredVal = it.required === false ? CONFIG.yesNo.no : CONFIG.yesNo.yes;
+        } else if (it.kind === "free_text") typeId = CONFIG.qType.free_text;
+        if (it.kind !== "instructions") {
+          requiredVal =
+            it.required === false ? CONFIG.yesNo.no : CONFIG.yesNo.yes;
         }
 
         var optionIds = [];
-        if (it.kind === 'choice') {
+        if (it.kind === "choice") {
           for (var c = 0; c < it.choices.length; c++) {
-            var lab = it.choices[c].text || 'Option';
+            var lab = it.choices[c].text || "Option";
             optionIds.push(await ensureOptionEntity(lab, optionCache));
           }
         }
         var title =
           job.sectionIndex +
           1 +
-          '.' +
+          "." +
           job.qNum +
-          ' ' +
-          String(it.heading || '').slice(0, 80);
+          " " +
+          String(it.heading || "").slice(0, 80);
         var metadata = {
           poll_number: [{ value: job.qNum }],
-          poll_question_text: [{ value: it.heading || '' }],
+          poll_question_text: [{ value: it.heading || "" }],
           poll_type: [{ value: typeId }],
           poll_section: [{ value: job.sectionSharedId }],
           poll_poll: [{ value: poll.sharedId }],
@@ -4487,62 +4943,62 @@
             return { value: id };
           });
         }
-        await apiWrite('POST', '/api/entities', {
+        await apiWrite("POST", "/api/entities", {
           title: title,
           template: CONFIG.templates.Question,
           published: false,
-          language: 'en',
+          language: "en",
           metadata: metadata,
         });
         createdItems += 1;
         if (createdItems % 20 === 0 || createdItems === wantItems) {
           state.importProgress =
-            'Creating questions… ' +
+            "Creating questions… " +
             createdItems +
-            '/' +
+            "/" +
             wantItems +
-            ' (×' +
+            " (×" +
             IMPORT_CONCURRENCY +
-            ')';
+            ")";
           renderList();
         }
       });
 
-      state.importProgress = 'Verifying import…';
+      state.importProgress = "Verifying import…";
       renderList();
       var check = await verifyImportedPoll(
         preview,
         poll.sharedId,
         createdSections,
-        createdItems
+        createdItems,
       );
       state.importProgress = null;
       state.optionsCache = null;
       closeModal();
       if (check.ok) {
         state.toast = {
-          message: 'Imported “' + preview.title + '” (' + check.summary + ').',
+          message: "Imported “" + preview.title + "” (" + check.summary + ").",
           pollSharedId: poll.sharedId,
         };
         state.error = null;
       } else {
         state.toast = {
           message:
-            'Import incomplete for “' +
+            "Import incomplete for “" +
             preview.title +
-            '” (' +
+            "” (" +
             check.summary +
-            '). Open structure to review.',
+            "). Open structure to review.",
           pollSharedId: poll.sharedId,
         };
         state.error =
-          'Import finished but counts do not match the preview (' +
+          "Import finished but counts do not match the preview (" +
           check.summary +
-          (check.runSummary ? '; ' + check.runSummary : '') +
-          ').';
+          (check.runSummary ? "; " + check.runSummary : "") +
+          ").";
       }
       await loadPolls();
-      state.view = 'list';
+      state.view = "list";
       renderList();
     } catch (e) {
       state.importProgress = null;
@@ -4553,30 +5009,30 @@
           var wantSec = (preview.sections || []).length;
           var wantItemsFail = expectedImportItemCount(preview);
           detail +=
-            ' — partial import: ' +
+            " — partial import: " +
             partial.sections +
-            '/' +
+            "/" +
             wantSec +
-            ' sections, ' +
+            " sections, " +
             partial.items +
-            '/' +
+            "/" +
             wantItemsFail +
-            ' items (created this run: ' +
+            " items (created this run: " +
             createdSections +
-            ' sections, ' +
+            " sections, " +
             createdItems +
-            ' items).';
+            " items).";
           state.toast = {
-            message: 'Import stopped early. Open the partial poll to review.',
+            message: "Import stopped early. Open the partial poll to review.",
             pollSharedId: poll.sharedId,
           };
         } catch (ignore) {
           detail +=
-            ' — stopped after creating ' +
+            " — stopped after creating " +
             createdSections +
-            ' sections / ' +
+            " sections / " +
             createdItems +
-            ' items.';
+            " items.";
         }
       }
       state.modalError = detail;
@@ -4586,21 +5042,26 @@
     }
   }
 
-
   function renderSessions() {
     var p = state.poll;
     var head =
       '<h1 class="pa-heading">Sessions — ' +
-      escapeHtml(p.title || '') +
-      '</h1>' +
+      escapeHtml(p.title || "") +
+      "</h1>" +
       '<p class="pa-sub">One session = one attempt. Share the link (poll + token). Login is still required to write answers.</p>';
-    var html = '';
+    var html = "";
     html += '<div class="pa-toolbar">';
-    html += '<button type="button" class="pa-btn" id="pa-back">Back to list</button>';
-    html += '<button type="button" class="pa-btn" id="pa-to-structure">Structure</button>';
+    html +=
+      '<button type="button" class="pa-btn" id="pa-back">Back to list</button>';
+    html +=
+      '<button type="button" class="pa-btn" id="pa-to-structure">Structure</button>';
     html +=
       '<button type="button" class="pa-btn primary" id="pa-add-session">New session</button>';
-    html += '</div>';
+    if (state.sessions.length) {
+      html +=
+        '<button type="button" class="pa-btn" id="pa-export-all-csv" title="One row per session, columns per question">Export all CSV</button>';
+    }
+    html += "</div>";
     html += errorHtml();
 
     if (!state.sessions.length) {
@@ -4608,121 +5069,202 @@
     } else {
       html +=
         '<table class="pa-table pa-sessions-table"><thead><tr>' +
-        '<th>Respondent</th><th>Status</th><th>Progress</th><th>Created</th><th>Accepted</th><th></th>' +
-        '</tr></thead><tbody>';
+        "<th>Respondent</th><th>Status</th><th>Progress</th><th>Created</th><th>Accepted</th><th></th>" +
+        "</tr></thead><tbody>";
       state.sessions.forEach(function (s) {
-        var token = metaVal(s, 'poll_token') || '';
-        var respondent = metaVal(s, 'poll_respondent') || s.title || '—';
+        var token = metaVal(s, "poll_token") || "";
+        var respondent = metaVal(s, "poll_respondent") || s.title || "—";
         var st = sessionStatusLabel(s);
         var stCls =
-          st === 'accepted' ? 'published' : st === 'in_progress' ? 'draft' : 'closed';
-        html += '<tr>';
-        html += '<td>' + escapeHtml(respondent) + '</td>';
+          st === "accepted"
+            ? "published"
+            : st === "in_progress"
+              ? "draft"
+              : "closed";
+        html += "<tr>";
+        html += "<td>" + escapeHtml(respondent) + "</td>";
         html +=
-          '<td><span class="pa-pill ' + stCls + '">' + escapeHtml(st) + '</span></td>';
-        html += '<td>' + sessionProgressCellHtml(s) + '</td>';
+          '<td><span class="pa-pill ' +
+          stCls +
+          '">' +
+          escapeHtml(st) +
+          "</span></td>";
+        html += "<td>" + sessionProgressCellHtml(s) + "</td>";
         html +=
           '<td class="pa-muted">' +
           escapeHtml(formatSessionDate(s.creationDate)) +
-          '</td>';
+          "</td>";
         html +=
           '<td class="pa-muted">' +
-          escapeHtml(formatSessionDate(metaVal(s, 'poll_accepted_at'))) +
-          '</td>';
+          escapeHtml(formatSessionDate(metaVal(s, "poll_accepted_at"))) +
+          "</td>";
         html += '<td class="pa-row-actions">';
+        html += '<details class="pa-actions-menu">';
+        html +=
+          '<summary class="pa-btn pa-actions-menu-toggle">Actions</summary>';
+        html += '<div class="pa-actions-menu-panel" role="menu">';
         if (token) {
           var openHref =
             window.location.origin +
             sessionPlayerUrl(state.poll.sharedId, token, { preview: true });
           html +=
-            '<button type="button" class="pa-btn pa-open-session" data-href="' +
+            '<button type="button" role="menuitem" class="pa-actions-menu-item pa-open-session" data-href="' +
             escapeHtml(openHref) +
-            '">Open</button>';
+            '">Open in player</button>';
           html +=
-            '<button type="button" class="pa-btn pa-icon-btn pa-copy-link" data-token="' +
+            '<button type="button" role="menuitem" class="pa-actions-menu-item pa-copy-link" data-token="' +
             escapeHtml(token) +
-            '" title="Copy share link" aria-label="Copy share link">' +
-            '<svg class="pa-icon" viewBox="0 0 24 24" aria-hidden="true">' +
-            '<path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>' +
-            '</svg></button>';
+            '">Copy share link</button>';
         } else {
-          html += '<span class="pa-muted">No token — fix Session template</span>';
-        }
-        if (st === 'accepted') {
           html +=
-            '<button type="button" class="pa-btn pa-reopen-session" data-id="' +
-            escapeHtml(s.sharedId) +
-            '">Reopen</button>';
+            '<p class="pa-muted pa-actions-menu-note">No token — fix Session template</p>';
         }
         html +=
-          '<button type="button" class="pa-btn pa-btn-danger pa-del-session" data-id="' +
+          '<button type="button" role="menuitem" class="pa-actions-menu-item pa-session-print" data-id="' +
+          escapeHtml(s.sharedId) +
+          '">Print / PDF</button>';
+        html +=
+          '<button type="button" role="menuitem" class="pa-actions-menu-item pa-session-csv" data-id="' +
+          escapeHtml(s.sharedId) +
+          '">Download CSV</button>';
+        if (st === "accepted") {
+          html +=
+            '<button type="button" role="menuitem" class="pa-actions-menu-item pa-reopen-session" data-id="' +
+            escapeHtml(s.sharedId) +
+            '">Reopen session</button>';
+        }
+        html +=
+          '<button type="button" role="menuitem" class="pa-actions-menu-item pa-actions-menu-danger pa-del-session" data-id="' +
           escapeHtml(s.sharedId) +
           '" data-label="' +
           escapeHtml(respondent) +
-          '">Delete</button>';
-        html += '</td></tr>';
+          '">Delete session</button>';
+        html += "</div></details>";
+        html += "</td></tr>";
       });
-      html += '</tbody></table>';
+      html += "</tbody></table>";
     }
 
     html = appendActiveModal(html);
     renderShell(html, head);
-    document.getElementById('pa-back').addEventListener('click', function () {
+    document.getElementById("pa-back").addEventListener("click", function () {
       closeModal();
-      state.view = 'list';
+      state.view = "list";
       bootList();
     });
-    document.getElementById('pa-to-structure').addEventListener('click', function () {
-      closeModal();
-      openPoll(p.sharedId, 'structure');
-    });
-    document.getElementById('pa-add-session').addEventListener('click', function () {
-      state.editingSession = { _new: true };
-      state.modal = 'session';
-      state.modalError = null;
-      renderSessions();
-    });
-    var opens = cardEl.querySelectorAll('.pa-open-session');
-    for (var o = 0; o < opens.length; o++) {
-      opens[o].addEventListener('click', function (ev) {
-        var href = ev.currentTarget.getAttribute('data-href');
-        if (href) window.open(href, '_blank', 'noopener,noreferrer');
+    document
+      .getElementById("pa-to-structure")
+      .addEventListener("click", function () {
+        closeModal();
+        openPoll(p.sharedId, "structure");
+      });
+    document
+      .getElementById("pa-add-session")
+      .addEventListener("click", function () {
+        state.editingSession = { _new: true };
+        state.modal = "session";
+        state.modalError = null;
+        renderSessions();
+      });
+    var exportAll = document.getElementById("pa-export-all-csv");
+    if (exportAll) {
+      exportAll.addEventListener("click", async function () {
+        setBusy(true);
+        state.error = null;
+        try {
+          await exportAllSessionsWideCsv();
+        } catch (e) {
+          state.error = e.message || String(e);
+          renderSessions();
+        } finally {
+          setBusy(false);
+        }
       });
     }
-    var copies = cardEl.querySelectorAll('.pa-copy-link');
+    bindActionsMenus();
+    var opens = cardEl.querySelectorAll(".pa-open-session");
+    for (var o = 0; o < opens.length; o++) {
+      opens[o].addEventListener("click", function (ev) {
+        var href = ev.currentTarget.getAttribute("data-href");
+        closeActionsMenus();
+        if (href) window.open(href, "_blank", "noopener,noreferrer");
+      });
+    }
+    var copies = cardEl.querySelectorAll(".pa-copy-link");
     for (var i = 0; i < copies.length; i++) {
-      copies[i].addEventListener('click', function (ev) {
+      copies[i].addEventListener("click", function (ev) {
         var btn = ev.currentTarget;
-        var token = btn.getAttribute('data-token');
+        var token = btn.getAttribute("data-token");
         var url =
           window.location.origin + sessionPlayerUrl(state.poll.sharedId, token);
+        var original = btn.textContent;
         function markCopied() {
           if (!btn) return;
-          btn.classList.add('pa-copied');
-          btn.setAttribute('title', 'Copied');
+          btn.textContent = "Copied!";
+          btn.classList.add("pa-copied");
           setTimeout(function () {
             if (!btn) return;
-            btn.classList.remove('pa-copied');
-            btn.setAttribute('title', 'Copy share link');
-          }, 1500);
+            btn.textContent = original;
+            btn.classList.remove("pa-copied");
+            closeActionsMenus();
+          }, 900);
         }
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(url).then(markCopied, function () {
-            window.prompt('Copy share link', url);
+            window.prompt("Copy share link", url);
+            closeActionsMenus();
           });
         } else {
-          window.prompt('Copy share link', url);
+          window.prompt("Copy share link", url);
+          closeActionsMenus();
         }
       });
     }
-    var reopens = cardEl.querySelectorAll('.pa-reopen-session');
-    for (var r = 0; r < reopens.length; r++) {
-      reopens[r].addEventListener('click', async function (ev) {
-        var id = ev.currentTarget.getAttribute('data-id');
+    var prints = cardEl.querySelectorAll(".pa-session-print");
+    for (var pi = 0; pi < prints.length; pi++) {
+      prints[pi].addEventListener("click", async function (ev) {
+        var id = ev.currentTarget.getAttribute("data-id");
         if (!id) return;
+        closeActionsMenus();
+        setBusy(true);
+        state.error = null;
+        try {
+          await exportOneSessionPrint(id);
+        } catch (e) {
+          state.error = e.message || String(e);
+          renderSessions();
+        } finally {
+          setBusy(false);
+        }
+      });
+    }
+    var csvs = cardEl.querySelectorAll(".pa-session-csv");
+    for (var ci = 0; ci < csvs.length; ci++) {
+      csvs[ci].addEventListener("click", async function (ev) {
+        var id = ev.currentTarget.getAttribute("data-id");
+        if (!id) return;
+        closeActionsMenus();
+        setBusy(true);
+        state.error = null;
+        try {
+          await exportOneSessionLongCsv(id);
+        } catch (e) {
+          state.error = e.message || String(e);
+          renderSessions();
+        } finally {
+          setBusy(false);
+        }
+      });
+    }
+    var reopens = cardEl.querySelectorAll(".pa-reopen-session");
+    for (var r = 0; r < reopens.length; r++) {
+      reopens[r].addEventListener("click", async function (ev) {
+        var id = ev.currentTarget.getAttribute("data-id");
+        if (!id) return;
+        closeActionsMenus();
         if (
           !window.confirm(
-            'Reopen this session? The respondent will be able to edit answers again with the same link.'
+            "Reopen this session? The respondent will be able to edit answers again with the same link.",
           )
         ) {
           return;
@@ -4730,17 +5272,19 @@
         await reopenSession(id);
       });
     }
-    var deletes = cardEl.querySelectorAll('.pa-del-session');
+    var deletes = cardEl.querySelectorAll(".pa-del-session");
     for (var d = 0; d < deletes.length; d++) {
-      deletes[d].addEventListener('click', async function (ev) {
-        var id = ev.currentTarget.getAttribute('data-id');
-        var label = ev.currentTarget.getAttribute('data-label') || 'this session';
+      deletes[d].addEventListener("click", async function (ev) {
+        var id = ev.currentTarget.getAttribute("data-id");
+        var label =
+          ev.currentTarget.getAttribute("data-label") || "this session";
         if (!id) return;
+        closeActionsMenus();
         if (
           !window.confirm(
             'Delete session for "' +
               label +
-              '"? This permanently removes the session and all its answers.'
+              '"? This permanently removes the session and all its answers.',
           )
         ) {
           return;
@@ -4755,7 +5299,7 @@
     if (!CONFIG.templates.Answer) return [];
     var rows = await searchByTemplate(CONFIG.templates.Answer);
     return rows.filter(function (a) {
-      return metaVal(a, 'poll_session') === sessionSharedId;
+      return metaVal(a, "poll_session") === sessionSharedId;
     });
   }
 
@@ -4764,7 +5308,7 @@
       return row.sharedId === sharedId;
     });
     if (!s) {
-      state.error = 'Session not found.';
+      state.error = "Session not found.";
       renderSessions();
       return;
     }
@@ -4793,35 +5337,37 @@
       return row.sharedId === sharedId;
     });
     if (!s) {
-      state.error = 'Session not found.';
+      state.error = "Session not found.";
       renderSessions();
       return;
     }
     setBusy(true);
     try {
       var metadata = {
-        poll_poll: [{ value: metaVal(s, 'poll_poll') || state.poll.sharedId }],
+        poll_poll: [{ value: metaVal(s, "poll_poll") || state.poll.sharedId }],
         poll_session_status: [{ value: CONFIG.sessionStatus.in_progress }],
-        poll_respondent: [{ value: metaVal(s, 'poll_respondent') || s.title || '' }],
+        poll_respondent: [
+          { value: metaVal(s, "poll_respondent") || s.title || "" },
+        ],
         poll_accepted_at: [],
       };
-      var token = metaVal(s, 'poll_token');
+      var token = metaVal(s, "poll_token");
       if (token) metadata.poll_token = [{ value: token }];
-      var answered = metaVal(s, 'poll_answered_count');
-      var qCount = metaVal(s, 'poll_question_count');
-      if (answered !== undefined && answered !== null && answered !== '') {
+      var answered = metaVal(s, "poll_answered_count");
+      var qCount = metaVal(s, "poll_question_count");
+      if (answered !== undefined && answered !== null && answered !== "") {
         metadata.poll_answered_count = [{ value: answered }];
       }
-      if (qCount !== undefined && qCount !== null && qCount !== '') {
+      if (qCount !== undefined && qCount !== null && qCount !== "") {
         metadata.poll_question_count = [{ value: qCount }];
       }
-      var saved = await api('POST', '/api/entities', {
+      var saved = await api("POST", "/api/entities", {
         _id: s._id,
         sharedId: s.sharedId,
         title: s.title,
         template: CONFIG.templates.Session,
         published: false,
-        language: 'en',
+        language: "en",
         metadata: metadata,
       });
       var ent = saved.entity || saved;
@@ -4840,10 +5386,10 @@
   }
 
   function renderSessionModalHtml() {
-    var html = '';
+    var html = "";
     html += '<div class="pa-modal-backdrop" id="pa-modal-backdrop">';
     html += '<div class="pa-modal" role="dialog" aria-modal="true">';
-    html += '<h2>New session</h2>';
+    html += "<h2>New session</h2>";
     html += modalErrorHtml();
     html += '<div class="pa-form">';
     html +=
@@ -4851,51 +5397,58 @@
       '<input id="pa-respondent" type="text" placeholder="e.g. Country X — reviewer A" />' +
       '<p class="pa-muted" style="margin:0.35rem 0 0">Free-text label only (not linked to a Uwazi user). A secret token is generated for the link.</p></div>';
     html += '<div class="pa-actions">';
-    html += '<button type="button" class="pa-btn" id="pa-cancel-modal">Cancel</button>';
-    html += '<button type="button" class="pa-btn primary" id="pa-save-session">Create</button>';
-    html += '</div></div></div></div>';
+    html +=
+      '<button type="button" class="pa-btn" id="pa-cancel-modal">Cancel</button>';
+    html +=
+      '<button type="button" class="pa-btn primary" id="pa-save-session">Create</button>';
+    html += "</div></div></div></div>";
     return html;
   }
 
   function bindSessionModal() {
-    var backdrop = document.getElementById('pa-modal-backdrop');
-    document.getElementById('pa-cancel-modal').addEventListener('click', function () {
-      closeModal();
-      renderSessions();
-    });
-    backdrop.addEventListener('click', function (ev) {
+    var backdrop = document.getElementById("pa-modal-backdrop");
+    document
+      .getElementById("pa-cancel-modal")
+      .addEventListener("click", function () {
+        closeModal();
+        renderSessions();
+      });
+    backdrop.addEventListener("click", function (ev) {
       if (ev.target === backdrop) {
         closeModal();
         renderSessions();
       }
     });
-    document.getElementById('pa-save-session').addEventListener('click', async function () {
-      await saveSessionModal();
-    });
-    var el = document.getElementById('pa-respondent');
+    document
+      .getElementById("pa-save-session")
+      .addEventListener("click", async function () {
+        await saveSessionModal();
+      });
+    var el = document.getElementById("pa-respondent");
     if (el) el.focus();
   }
 
   async function saveSessionModal() {
-    var label = (document.getElementById('pa-respondent').value || '').trim();
+    var label = (document.getElementById("pa-respondent").value || "").trim();
     if (!label) {
-      state.modalError = 'Respondent label is required.';
+      state.modalError = "Respondent label is required.";
       renderSessions();
       return;
     }
     if (!CONFIG.templates.Session) {
-      state.modalError = 'Session template missing — use Templates setup first.';
+      state.modalError =
+        "Session template missing — use Templates setup first.";
       renderSessions();
       return;
     }
     var token = generateToken();
     setBusy(true);
     try {
-      var saved = await api('POST', '/api/entities', {
-        title: label + ' · ' + (state.poll.title || 'poll'),
+      var saved = await api("POST", "/api/entities", {
+        title: label + " · " + (state.poll.title || "poll"),
         template: CONFIG.templates.Session,
         published: false,
-        language: 'en',
+        language: "en",
         metadata: {
           poll_poll: [{ value: state.poll.sharedId }],
           poll_session_status: [{ value: CONFIG.sessionStatus.in_progress }],
@@ -4909,7 +5462,9 @@
       ent.metadata.poll_token = [{ value: token }];
       ent.metadata.poll_respondent = [{ value: label }];
       ent.metadata.poll_poll = [{ value: state.poll.sharedId }];
-      ent.metadata.poll_session_status = [{ value: CONFIG.sessionStatus.in_progress }];
+      ent.metadata.poll_session_status = [
+        { value: CONFIG.sessionStatus.in_progress },
+      ];
       state.sessions.unshift(ent);
       closeModal();
       state.error = null;
@@ -4923,9 +5478,9 @@
   }
 
   function render() {
-    if (state.view === 'list') renderList();
-    else if (state.view === 'structure') renderStructure();
-    else if (state.view === 'sessions') renderSessions();
+    if (state.view === "list") renderList();
+    else if (state.view === "structure") renderStructure();
+    else if (state.view === "sessions") renderSessions();
   }
 
   async function bootList() {
@@ -4941,11 +5496,11 @@
         state.relationTypeReport = null;
       }
       await loadPolls();
-      state.view = 'list';
+      state.view = "list";
       renderList();
     } catch (e) {
       renderShell(
-        '<p class="pa-error">' + escapeHtml(e.message || String(e)) + '</p>'
+        '<p class="pa-error">' + escapeHtml(e.message || String(e)) + "</p>",
       );
     } finally {
       setBusy(false);
@@ -4955,12 +5510,16 @@
   async function init() {
     state.user = getUser();
     if (!state.user || !state.user._id) {
-      renderShell('<p class="pa-error">Please log in as an admin or editor to manage polls.</p>');
+      renderShell(
+        '<p class="pa-error">Please log in as an admin or editor to manage polls.</p>',
+      );
       return;
     }
     var role = state.user.role;
-    if (role && role !== 'admin' && role !== 'editor') {
-      renderShell('<p class="pa-error">Poll admin requires an admin or editor account.</p>');
+    if (role && role !== "admin" && role !== "editor") {
+      renderShell(
+        '<p class="pa-error">Poll admin requires an admin or editor account.</p>',
+      );
       return;
     }
     renderShell('<p class="pa-muted">Loading polls...</p>');
@@ -4968,7 +5527,7 @@
       await resolvePlayerPage();
     } catch (e) {
       renderShell(
-        '<p class="pa-error">' + escapeHtml(e.message || String(e)) + '</p>'
+        '<p class="pa-error">' + escapeHtml(e.message || String(e)) + "</p>",
       );
       return;
     }
